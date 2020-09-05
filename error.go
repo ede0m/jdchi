@@ -34,11 +34,29 @@ func ErrInvalidRequest(err error) render.Renderer {
 	}
 }
 
+func ErrNotFound(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 404,
+		StatusText:     "Resource not found",
+		ErrorText:      err.Error(),
+	}
+}
+
 func ErrRender(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
 		HTTPStatusCode: 422,
 		StatusText:     "Error rendering response.",
+		ErrorText:      err.Error(),
+	}
+}
+
+func ErrServer(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 500,
+		StatusText:     "A server error occured",
 		ErrorText:      err.Error(),
 	}
 }
