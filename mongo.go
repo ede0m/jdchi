@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -51,17 +53,42 @@ func (mh *MongoHandler) InsertMasterSchedule(ms *MasterSchedule) (*mongo.InsertO
 	return result, err
 }
 
-// GetOne scheudle doc by filter, options
-func (mh *MongoHandler) GetOne(ms *MasterSchedule, filter interface{}, opts *options.FindOneOptions) error {
-	//Will automatically create a collection if not available
+// GetMasterSchedule scheudle doc by filter, options
+func (mh *MongoHandler) GetMasterSchedule(ms *MasterSchedule, filter interface{}) error {
+
 	collection := mh.client.Database(mh.database).Collection("schedule")
+
+	/*
+		It is better to explain it using 2 parameters, e.g. search for a = 1 and b = 2.
+		Your syntax will be: bson.M{"a": 1, "b": 2} or bson.D{{"a": 1}, {"b": 2}}
+
+		bson.D respects order
+	*/
+	opts := options.FindOne()
+	opts.SetSort(bson.D{{"createdAt", -1}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var err error = nil
-	if opts != nil {
-		err = collection.FindOne(ctx, filter, opts).Decode(ms)
-	} else {
-		err = collection.FindOne(ctx, filter, opts).Decode(ms)
-	}
+	err := collection.FindOne(ctx, filter, opts).Decode(ms)
 	return err
+}
+
+// InsertUser inserts one master schedule into scheudle colletion
+func (mh *MongoHandler) InsertUser(u *User) (*mongo.InsertOneResult, error) {
+	collection := mh.client.Database(mh.database).Collection("user")
+
+	// check email doesn't already exist
+	ctxf, cancelf := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelf()
+	findu := &User{}
+	err := collection.FindOne(ctxf, bson.M{"email": u.Email}).Decode(findu)
+	//If the filter does not match any documents, a SingleResult with an error set to ErrNoDocuments will be returned.
+	if err == nil {
+		// user exists
+		return nil, errors.New("email already registered")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := collection.InsertOne(ctx, u)
+	return result, err
 }

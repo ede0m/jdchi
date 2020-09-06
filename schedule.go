@@ -6,12 +6,14 @@ import (
 	"time"
 
 	jdscheduler "github.com/ede0m/jdgoscheduler"
+	"github.com/go-chi/render"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // MasterSchedule is a jdscheudler output that is returned to all users
 type MasterSchedule struct {
 	Schedule  jdscheduler.Schedule `json:"schedule" bson:"schedule"`
-	CreatedAt time.Time            `json:"createdAt" bson:"createdat"`
+	CreatedAt time.Time            `json:"createdAt" bson:"createdAt"`
 	// TODO persist pick orders
 	// TODO persist trade log
 }
@@ -87,4 +89,51 @@ func (sr *ScheduleRequest) Bind(r *http.Request) error {
 	// TODO: handle user
 
 	return nil
+}
+
+////////////  CONTROLLERS //////////////////
+
+// GenerateSchedule just generates a scheudle with given query parameteres
+func GenerateSchedule(w http.ResponseWriter, r *http.Request) {
+	data := &ScheduleRequest{}
+	if err := render.Bind(r, data); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	start, wksPSeason, nSeason, participants := data.StartDate, data.SeasonWeeks, data.Years, data.Participants
+	s := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
+
+	render.Status(r, http.StatusOK)
+	render.Render(w, r, NewScheduleResponse(*s))
+}
+
+// CreateMasterSchedule commits a schedule as master to schedule
+func CreateMasterSchedule(w http.ResponseWriter, r *http.Request) {
+	data := &ScheduleRequest{}
+	if err := render.Bind(r, data); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	start, wksPSeason, nSeason, participants := data.StartDate, data.SeasonWeeks, data.Years, data.Participants
+	s := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
+	ms := NewMasterSchedule(*s)
+	_, err := mh.InsertMasterSchedule(ms)
+	if err != nil {
+		render.Render(w, r, ErrServer(err))
+		return
+	}
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, NewMasterScheduleResponse(*ms))
+}
+
+// GetMasterSchedule retrieves the current (most recent) master scheudle
+func GetMasterSchedule(w http.ResponseWriter, r *http.Request) {
+	ms := &MasterSchedule{}
+	err := mh.GetMasterSchedule(ms, bson.M{})
+	if err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+	render.Status(r, http.StatusOK)
+	render.Render(w, r, NewMasterScheduleResponse(*ms))
 }
