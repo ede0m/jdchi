@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/render"
 )
 
-var tokenAuth *jwtauth.JWTAuth = jwtauth.New("HS256", []byte("superdupersecret :)"), nil)
+var tokenAuth *jwtauth.JWTAuth = jwtauth.New("HS256", []byte(JWTSecret), nil)
 
 // User for login/register
 type User struct {
