@@ -92,3 +92,13 @@ func (mh *MongoHandler) InsertUser(u *User) (*mongo.InsertOneResult, error) {
 	result, err := collection.InsertOne(ctx, u)
 	return result, err
 }
+
+// GetUser get a user
+func (mh *MongoHandler) GetUser(u *User, filter interface{}) error {
+
+	collection := mh.client.Database(mh.database).Collection("user")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := collection.FindOne(ctx, filter).Decode(u)
+	return err
+}

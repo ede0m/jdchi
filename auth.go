@@ -5,10 +5,15 @@ import (
 	"net/http"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/dgrijalva/jwt-go"
+	"github.com/go-chi/jwtauth"
 	"github.com/go-chi/render"
 )
+
+var tokenAuth *jwtauth.JWTAuth = jwtauth.New("HS256", []byte("superdupersecret :)"), nil)
 
 // User for login/register
 type User struct {
@@ -36,6 +41,7 @@ type LoginRequest struct {
 // UserResponse a typical response for login/register
 type UserResponse struct {
 	FirstName string `json:"firstName"`
+	Token     string `json:"token"`
 }
 
 // NewUser constructor for a new User. hash password
@@ -50,12 +56,11 @@ func NewUser(rr RegisterRequest) (*User, error) {
 
 // NewUserResponse constructor for UserResponse
 func NewUserResponse(u User) *UserResponse {
-	return &UserResponse{u.FirstName}
+	return &UserResponse{u.FirstName, createTokenString(u.Email)}
 }
 
 // Render is called in top-down order, like a http handler middleware chain.
-func (rd *UserResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	// Pre-processing before a response is marshalled and sent across the wire
+func (ur *UserResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
@@ -68,7 +73,15 @@ func (rr *RegisterRequest) Bind(r *http.Request) error {
 	if rr.FirstName == "" || rr.LastName == "" {
 		return errors.New("enter a first name and last name")
 	}
+	return nil
+}
 
+// Bind binds the http req to scheduleRequest type as the render
+func (rr *LoginRequest) Bind(r *http.Request) error {
+	// TODO: check email is valid?
+	if rr.Email == "" {
+		return errors.New("improper email")
+	}
 	return nil
 }
 
@@ -94,4 +107,32 @@ func RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 	render.Status(r, http.StatusCreated)
 	render.Render(w, r, NewUserResponse(*u))
+}
+
+// LoginUser logs in a user after checking credentials. generates a new jwt for auth
+func LoginUser(w http.ResponseWriter, r *http.Request) {
+	data := &LoginRequest{}
+	if err := render.Bind(r, data); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	user := &User{}
+	err := mh.GetUser(user, bson.M{"email": data.Email})
+	if err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password))
+	if err != nil {
+		render.Render(w, r, ErrAuth(err))
+		return
+	}
+	render.Status(r, http.StatusOK)
+	render.Render(w, r, NewUserResponse(*user))
+}
+
+func createTokenString(email string) string {
+	_, tokenString, _ := tokenAuth.Encode(jwt.MapClaims{"email": email, "exp": jwtauth.ExpireIn(15 * time.Minute)})
+	return tokenString
 }

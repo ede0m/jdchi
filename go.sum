@@ -3,6 +3,8 @@ github.com/aws/aws-sdk-go v1.29.15 h1:0ms/213murpsujhsnxnNKNeVouW60aJqSd992Ks3mx
 github.com/aws/aws-sdk-go v1.29.15/go.mod h1:1KvfttTE3SPKMpo8g2c6jL3ZKfXtFvKscTgahTma5Xg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=
+github.com/dgrijalva/jwt-go v3.2.0+incompatible/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
 github.com/ede0m/jdgoscheduler v0.0.0-20200901051510-6b2fd518bb01 h1:DS1vtIAWcnn6Q+oA/D6Q6wByN9CFL/mc3JdTsnAJHZU=
 github.com/ede0m/jdgoscheduler v0.0.0-20200901051510-6b2fd518bb01/go.mod h1:lLt9PA7+YtJ83NOcB0t7N+9FvFjWJB6RTqnCw2sXAac=
 github.com/ede0m/jdgoscheduler v0.0.0-20200901052802-f2e58316ba0c h1:S57ctUJW/tKWTGt0B0zOcHm+iPeHp4KrtrOYiPPXkso=
@@ -15,6 +17,8 @@ github.com/ede0m/jdgoscheduler v0.0.0-20200904071344-59188c39c286 h1:t3EmwrVL1aG
 github.com/ede0m/jdgoscheduler v0.0.0-20200904071344-59188c39c286/go.mod h1:lLt9PA7+YtJ83NOcB0t7N+9FvFjWJB6RTqnCw2sXAac=
 github.com/go-chi/chi v4.1.2+incompatible h1:fGFk2Gmi/YKXk0OmGfBh0WgmN3XB8lVnEyNz34tQRec=
 github.com/go-chi/chi v4.1.2+incompatible/go.mod h1:eB3wogJHnLi3x/kFX2A+IbTBlXxmMeXJVKy9tTv1XzQ=
+github.com/go-chi/jwtauth v4.0.4+incompatible h1:LGIxg6YfvSBzxU2BljXbrzVc1fMlgqSKBQgKOGAVtPY=
+github.com/go-chi/jwtauth v4.0.4+incompatible/go.mod h1:Q5EIArY/QnD6BdS+IyDw7B2m6iNbnPxtfd6/BcmtWbs=
 github.com/go-chi/render v1.0.1 h1:4/5tis2cKaNdnv9zFLfXzcquC9HbeZgCnxGnKrltBS8=
 github.com/go-chi/render v1.0.1/go.mod h1:pq4Rr7HbnsdaeHagklXub+p6Wd16Af5l9koip1OvJns=
 github.com/go-sql-driver/mysql v1.5.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=

@@ -34,6 +34,15 @@ func ErrInvalidRequest(err error) render.Renderer {
 	}
 }
 
+func ErrAuth(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 401,
+		StatusText:     "Unauthorized",
+		ErrorText:      err.Error(),
+	}
+}
+
 func ErrNotFound(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
