@@ -40,6 +40,12 @@ func NewGroup(gr GroupRequest) (*Group, error) {
 		return nil, errors.New("one or more emails not found in system")
 	}
 
+	g := &Group{}
+	_, err = mh.GetGroup(g, bson.M{"name": gr.Name})
+	if err == nil {
+		return nil, errors.New("group name: " + gr.Name + " aready exists")
+	}
+
 	var adminIds []primitive.ObjectID
 	for _, u := range foundUsers {
 		adminIds = append(adminIds, u.ID)

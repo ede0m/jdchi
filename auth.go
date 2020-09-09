@@ -54,6 +54,12 @@ func NewUser(rr RegisterRequest) (*User, error) {
 	if err != nil {
 		return nil, errors.New("register failure genp")
 	}
+	u := &User{}
+	err = mh.GetUser(u, bson.M{"email": u.Email})
+	if err == nil {
+		// user exists
+		return nil, errors.New("email already registered")
+	}
 	createdAt := time.Now()
 	// TODO add with new group!
 	return &User{primitive.NilObjectID, rr.Email, string(hashedPassword), rr.FirstName, rr.LastName, createdAt, nil}, nil

@@ -80,18 +80,6 @@ func (mh *MongoHandler) GetMasterSchedule(ms *MasterSchedule, filter interface{}
 // InsertUser inserts one master schedule into scheudle colletion
 func (mh *MongoHandler) InsertUser(u *User) (*mongo.InsertOneResult, error) {
 	collection := mh.client.Database(mh.database).Collection("user")
-
-	// check email doesn't already exist
-	ctxf, cancelf := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelf()
-	findu := &User{}
-	err := collection.FindOne(ctxf, bson.M{"email": u.Email}).Decode(findu)
-	//If the filter does not match any documents, a SingleResult with an error set to ErrNoDocuments will be returned.
-	if err == nil {
-		// user exists
-		return nil, errors.New("email already registered")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	result, err := collection.InsertOne(ctx, u)
@@ -130,6 +118,15 @@ func (mh *MongoHandler) GetUsers(filter interface{}) ([]*User, error) {
 		result = append(result, u)
 	}
 	return result, nil
+}
+
+// GetGroup get a user
+func (mh *MongoHandler) GetGroup(g *Group, filter interface{}) (*Group, error) {
+	collection := mh.client.Database(mh.database).Collection("group")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := collection.FindOne(ctx, filter).Decode(g)
+	return g, err
 }
 
 // InsertGroup create new group and adds group to all admin user's groups in transaction
