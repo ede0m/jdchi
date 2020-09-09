@@ -8,12 +8,16 @@ import (
 	jdscheduler "github.com/ede0m/jdgoscheduler"
 	"github.com/go-chi/render"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // MasterSchedule is a jdscheudler output that is returned to all users
 type MasterSchedule struct {
+	ID        primitive.ObjectID   `json:"id" bson:"_id,omitempty"`
 	Schedule  jdscheduler.Schedule `json:"schedule" bson:"schedule"`
 	CreatedAt time.Time            `json:"createdAt" bson:"createdAt"`
+	GroupID   primitive.ObjectID   `json:"groupId" bson:"groupId"`
+
 	// TODO persist pick orders
 	// TODO persist trade log
 }
@@ -40,13 +44,12 @@ type ScheduleRequest struct {
 // NewMasterSchedule creates a new master schedule
 func NewMasterSchedule(s jdscheduler.Schedule) *MasterSchedule {
 	// TODO: get scheudle's scheudler pick order state, create trade log
-	ms := &MasterSchedule{s, time.Now()}
+	ms := &MasterSchedule{primitive.NilObjectID, s, time.Now(), primitive.NilObjectID}
 	return ms
 }
 
 // NewMasterScheduleResponse creates a new master schedule
 func NewMasterScheduleResponse(ms MasterSchedule) *MasterScheduleResponse {
-	// TODO: get scheudle's scheudler pick order state, create trade log
 	msr := &MasterScheduleResponse{MasterSchedule: ms}
 	return msr
 }
@@ -117,11 +120,12 @@ func CreateMasterSchedule(w http.ResponseWriter, r *http.Request) {
 	start, wksPSeason, nSeason, participants := data.StartDate, data.SeasonWeeks, data.Years, data.Participants
 	s := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
 	ms := NewMasterSchedule(*s)
-	_, err := mh.InsertMasterSchedule(ms)
+	result, err := mh.InsertMasterSchedule(ms)
 	if err != nil {
 		render.Render(w, r, ErrServer(err))
 		return
 	}
+	ms.ID = result.InsertedID.(primitive.ObjectID)
 	render.Status(r, http.StatusCreated)
 	render.Render(w, r, NewMasterScheduleResponse(*ms))
 }

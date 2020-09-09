@@ -36,6 +36,14 @@ func main() {
 		})
 	})
 
+	r.Group(func(r chi.Router) {
+		r.Use(jwtauth.Verifier(tokenAuth))
+		r.Use(jwtauth.Authenticator)
+		r.Route("/group", func(r chi.Router) {
+			r.Post("/", CreateGroup)
+		})
+	})
+
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/register", RegisterUser)
 		r.Post("/login", LoginUser)

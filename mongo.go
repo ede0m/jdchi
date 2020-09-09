@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -29,7 +31,10 @@ func NewMongoHandler() *MongoHandler {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	clientOpts := options.Client().ApplyURI("mongodb://" + MongoHost + ":" + MongoPort).SetAuth(credential)
+	clientOpts := options.Client().ApplyURI("mongodb://" + MongoHost + ":" + MongoPort).
+		SetAuth(credential).
+		SetReplicaSet(MongoReplicaSet)
+
 	client, err := mongo.Connect(ctx, clientOpts)
 	if err != nil {
 		panic(err)
@@ -95,10 +100,76 @@ func (mh *MongoHandler) InsertUser(u *User) (*mongo.InsertOneResult, error) {
 
 // GetUser get a user
 func (mh *MongoHandler) GetUser(u *User, filter interface{}) error {
-
 	collection := mh.client.Database(mh.database).Collection("user")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err := collection.FindOne(ctx, filter).Decode(u)
 	return err
+}
+
+// GetUsers returns list of users specified by filter
+func (mh *MongoHandler) GetUsers(filter interface{}) ([]*User, error) {
+	collection := mh.client.Database(mh.database).Collection("user")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	projection := bson.D{{"email", 1}, {"_id", 1}} // set field to 1 to project
+	cur, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var result []*User
+	for cur.Next(ctx) {
+		u := &User{}
+		er := cur.Decode(u)
+		if er != nil {
+			log.Fatal(er)
+		}
+		result = append(result, u)
+	}
+	return result, nil
+}
+
+// InsertGroup create new group and adds group to all admin user's groups in transaction
+func (mh *MongoHandler) InsertGroup(g *Group) (primitive.ObjectID, error) {
+	collectionGroup := mh.client.Database(mh.database).Collection("group")
+	collectionUser := mh.client.Database(mh.database).Collection("user")
+
+	var session mongo.Session
+	var err error
+	if session, err = mh.client.StartSession(); err != nil {
+		return primitive.NilObjectID, errors.New("session error")
+	}
+	if err := session.StartTransaction(); err != nil {
+		return primitive.NilObjectID, errors.New("tx group error")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	groupID := primitive.NilObjectID
+	if err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+		// create the group
+		result, err := collectionGroup.InsertOne(ctx, g)
+		if err != nil {
+			return err
+		}
+		// add group to all members
+		groupID = result.InsertedID.(primitive.ObjectID)
+		var update = bson.D{{Key: "$addToSet", Value: bson.D{{Key: "groups", Value: groupID}}}}
+		for _, mID := range g.Members {
+			if _, err := collectionUser.UpdateOne(sc, bson.M{"_id": mID}, update); err != nil {
+				return err
+			}
+		}
+		if err = session.CommitTransaction(sc); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return primitive.NilObjectID, err
+	}
+	session.EndSession(ctx)
+	return groupID, nil
 }

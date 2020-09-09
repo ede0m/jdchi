@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/dgrijalva/jwt-go"
@@ -17,19 +18,22 @@ var tokenAuth *jwtauth.JWTAuth = jwtauth.New("HS256", []byte(JWTSecret), nil)
 
 // User for login/register
 type User struct {
-	Email     string    `json:"email" bson:"email"`
-	Password  string    `json:"password" bson:"password"`
-	FirstName string    `json:"firstName" bson:"firstName"`
-	LastName  string    `json:"lastName" bson:"lastName"`
-	CreatedAt time.Time `json:"createdAt" bson:"createdAt"`
+	ID        primitive.ObjectID   `json:"id" bson:"_id,omitempty"`
+	Email     string               `json:"email" bson:"email"`
+	Password  string               `json:"password" bson:"password"`
+	FirstName string               `json:"firstName" bson:"firstName"`
+	LastName  string               `json:"lastName" bson:"lastName"`
+	CreatedAt time.Time            `json:"createdAt" bson:"createdAt"`
+	Groups    []primitive.ObjectID `json:"groups" bson:"groups"`
 }
 
 // RegisterRequest request
 type RegisterRequest struct {
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Email     string `json:"email"`
-	Password  string `json:"password"`
+	FirstName string             `json:"firstName"`
+	LastName  string             `json:"lastName"`
+	Email     string             `json:"email"`
+	Password  string             `json:"password"`
+	Group     primitive.ObjectID `json:"group"`
 }
 
 // LoginRequest for logins
@@ -51,7 +55,8 @@ func NewUser(rr RegisterRequest) (*User, error) {
 		return nil, errors.New("register failure genp")
 	}
 	createdAt := time.Now()
-	return &User{rr.Email, string(hashedPassword), rr.FirstName, rr.LastName, createdAt}, nil
+	// TODO add with new group!
+	return &User{primitive.NilObjectID, rr.Email, string(hashedPassword), rr.FirstName, rr.LastName, createdAt, nil}, nil
 }
 
 // NewUserResponse constructor for UserResponse
