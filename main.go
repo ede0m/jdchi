@@ -41,11 +41,14 @@ func main() {
 		r.Use(jwtauth.Authenticator)
 		r.Route("/group", func(r chi.Router) {
 			r.Post("/", CreateGroup)
+			r.Post("/invitation", CreateGroupInvite)
+		})
+		r.Route("/user", func(r chi.Router) {
+			//r.Put("/", UpdateUser)
 		})
 	})
 
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/register", RegisterUser)
 		r.Post("/login", LoginUser)
 	})
 

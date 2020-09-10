@@ -44,8 +44,9 @@ type LoginRequest struct {
 
 // UserResponse a typical response for login/register
 type UserResponse struct {
-	FirstName string `json:"firstName"`
-	Token     string `json:"token"`
+	FirstName string   `json:"firstName"`
+	Groups    []string `json:groups`
+	Token     string   `json:"token"`
 }
 
 // NewUser constructor for a new User. hash password
@@ -55,19 +56,26 @@ func NewUser(rr RegisterRequest) (*User, error) {
 		return nil, errors.New("register failure genp")
 	}
 	u := &User{}
-	err = mh.GetUser(u, bson.M{"email": u.Email})
+	err = mh.GetUser(u, bson.M{"email": rr.Email})
 	if err == nil {
 		// user exists
-		return nil, errors.New("email already registered")
+		return nil, errors.New("email " + rr.Email + " already registered")
 	}
 	createdAt := time.Now()
-	// TODO add with new group!
-	return &User{primitive.NilObjectID, rr.Email, string(hashedPassword), rr.FirstName, rr.LastName, createdAt, nil}, nil
+	// first group
+	groups := make([]primitive.ObjectID, 1)
+	groups[0] = rr.Group
+	return &User{primitive.NilObjectID, rr.Email, string(hashedPassword), rr.FirstName, rr.LastName, createdAt, groups}, nil
 }
 
 // NewUserResponse constructor for UserResponse
 func NewUserResponse(u User) *UserResponse {
-	return &UserResponse{u.FirstName, createTokenString(u.Email)}
+	var groups []string
+	for _, g := range u.Groups {
+		groups = append(groups, g.Hex())
+	}
+	jwt := createTokenString(u.ID.Hex(), 15*time.Minute) // expires in 15 mins
+	return &UserResponse{u.FirstName, groups, jwt}
 }
 
 // Render is called in top-down order, like a http handler middleware chain.
@@ -143,7 +151,7 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 	render.Render(w, r, NewUserResponse(*user))
 }
 
-func createTokenString(email string) string {
-	_, tokenString, _ := tokenAuth.Encode(jwt.MapClaims{"email": email, "exp": jwtauth.ExpireIn(15 * time.Minute)})
+func createTokenString(userID string, expiresIn time.Duration) string {
+	_, tokenString, _ := tokenAuth.Encode(jwt.MapClaims{"userID": userID, "exp": jwtauth.ExpireIn(expiresIn)})
 	return tokenString
 }

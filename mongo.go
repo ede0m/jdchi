@@ -86,6 +86,47 @@ func (mh *MongoHandler) InsertUser(u *User) (*mongo.InsertOneResult, error) {
 	return result, err
 }
 
+// InsertGroupUsers creats users and adds them to group
+func (mh *MongoHandler) InsertGroupUsers(users []*User, groupID primitive.ObjectID) (*mongo.InsertManyResult, error) {
+	collectionGroup := mh.client.Database(mh.database).Collection("group")
+	collectionUser := mh.client.Database(mh.database).Collection("user")
+	var many []interface{}
+	for _, u := range users {
+		many = append(many, u)
+	}
+	var session mongo.Session
+	var err error
+	if session, err = mh.client.StartSession(); err != nil {
+		return nil, errors.New("session error")
+	}
+	if err := session.StartTransaction(); err != nil {
+		return nil, errors.New("tx group error")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var result *mongo.InsertManyResult
+	if err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+		// create users
+		result, err = collectionUser.InsertMany(ctx, many)
+		if err != nil {
+			return err
+		}
+		// add to group
+		var update = bson.M{"$addToSet": bson.M{"members": bson.M{"$each": result.InsertedIDs}}}
+		if _, err := collectionGroup.UpdateOne(sc, bson.M{"_id": groupID}, update); err != nil {
+			return err
+		}
+		if err = session.CommitTransaction(sc); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	session.EndSession(ctx)
+	return result, nil
+}
+
 // GetUser get a user
 func (mh *MongoHandler) GetUser(u *User, filter interface{}) error {
 	collection := mh.client.Database(mh.database).Collection("user")
@@ -121,12 +162,12 @@ func (mh *MongoHandler) GetUsers(filter interface{}) ([]*User, error) {
 }
 
 // GetGroup get a user
-func (mh *MongoHandler) GetGroup(g *Group, filter interface{}) (*Group, error) {
+func (mh *MongoHandler) GetGroup(g *Group, filter interface{}) error {
 	collection := mh.client.Database(mh.database).Collection("group")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err := collection.FindOne(ctx, filter).Decode(g)
-	return g, err
+	return err
 }
 
 // InsertGroup create new group and adds group to all admin user's groups in transaction
