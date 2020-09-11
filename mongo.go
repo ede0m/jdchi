@@ -70,7 +70,7 @@ func (mh *MongoHandler) GetMasterSchedule(ms *MasterSchedule, filter interface{}
 		bson.D respects order
 	*/
 	opts := options.FindOne()
-	opts.SetSort(bson.D{{"createdAt", -1}})
+	opts.SetSort(bson.M{"createdAt": -1})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err := collection.FindOne(ctx, filter, opts).Decode(ms)

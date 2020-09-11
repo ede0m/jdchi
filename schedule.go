@@ -6,6 +6,8 @@ import (
 	"time"
 
 	jdscheduler "github.com/ede0m/jdgoscheduler"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/jwtauth"
 	"github.com/go-chi/render"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -32,20 +34,25 @@ type ScheduleResponse struct {
 	Schedule jdscheduler.Schedule `json:"schedule"`
 }
 
+// MasterScheduleRequest is the request payload for creating master schedules for a group
+type MasterScheduleRequest struct {
+	Schedule jdscheduler.Schedule `json:"schedule"`
+	GroupID  string
+}
+
 // ScheduleRequest is the request payload for generating schedules against the jdscheduler module
 type ScheduleRequest struct {
 	StartDate    time.Time // must pass in RFC3339 or UTC format
 	SeasonWeeks  int
 	Years        int
 	Participants []string
-	User         string
 }
 
 // NewMasterSchedule creates a new master schedule
-func NewMasterSchedule(s jdscheduler.Schedule) *MasterSchedule {
+func NewMasterSchedule(s jdscheduler.Schedule, groupID primitive.ObjectID) (*MasterSchedule, error) {
 	// TODO: get scheudle's scheudler pick order state, create trade log
-	ms := &MasterSchedule{primitive.NilObjectID, s, time.Now(), primitive.NilObjectID}
-	return ms
+	ms := &MasterSchedule{primitive.NilObjectID, s, time.Now(), groupID}
+	return ms, nil
 }
 
 // NewMasterScheduleResponse creates a new master schedule
@@ -94,6 +101,16 @@ func (sr *ScheduleRequest) Bind(r *http.Request) error {
 	return nil
 }
 
+// Bind binds the http req to scheduleRequest type as the render
+func (msr *MasterScheduleRequest) Bind(r *http.Request) error {
+	if msr.GroupID == "" {
+		return errors.New("must bind schedule to group")
+	}
+
+	// TODO: verify schedule is populated?
+	return nil
+}
+
 ////////////  CONTROLLERS //////////////////
 
 // GenerateSchedule just generates a scheudle with given query parameteres
@@ -112,14 +129,32 @@ func GenerateSchedule(w http.ResponseWriter, r *http.Request) {
 
 // CreateMasterSchedule commits a schedule as master to schedule
 func CreateMasterSchedule(w http.ResponseWriter, r *http.Request) {
-	data := &ScheduleRequest{}
+	data := &MasterScheduleRequest{}
 	if err := render.Bind(r, data); err != nil {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
-	start, wksPSeason, nSeason, participants := data.StartDate, data.SeasonWeeks, data.Years, data.Participants
-	s := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
-	ms := NewMasterSchedule(*s)
+	s := data.Schedule
+	// group must exist
+	groupID, err := primitive.ObjectIDFromHex(data.GroupID)
+	if err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	g := &Group{}
+	if err = mh.GetGroup(g, bson.M{"_id": groupID}); err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+	// scheudle must be created by admin of group
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	uid, _ := primitive.ObjectIDFromHex(claims["userID"].(string))
+	if ok := g.HasAdmin(uid); !ok {
+		render.Render(w, r, ErrAuth(errors.New("not authorized for this group")))
+		return
+	}
+
+	ms, err := NewMasterSchedule(s, groupID)
 	result, err := mh.InsertMasterSchedule(ms)
 	if err != nil {
 		render.Render(w, r, ErrServer(err))
@@ -132,8 +167,14 @@ func CreateMasterSchedule(w http.ResponseWriter, r *http.Request) {
 
 // GetMasterSchedule retrieves the current (most recent) master scheudle
 func GetMasterSchedule(w http.ResponseWriter, r *http.Request) {
+	gid := chi.URLParam(r, "groupID")
+	groupID, err := primitive.ObjectIDFromHex(gid)
+	if err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
 	ms := &MasterSchedule{}
-	err := mh.GetMasterSchedule(ms, bson.M{})
+	err = mh.GetMasterSchedule(ms, bson.M{"groupId": groupID})
 	if err != nil {
 		render.Render(w, r, ErrNotFound(err))
 		return

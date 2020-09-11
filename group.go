@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -164,15 +165,9 @@ func CreateGroupInvite(w http.ResponseWriter, r *http.Request) {
 	// must be made by admin of group to create
 	_, claims, _ := jwtauth.FromContext(r.Context())
 	uid, _ := primitive.ObjectIDFromHex(claims["userID"].(string))
-	validAdmin := false
-	for _, u := range g.Admins {
-		if u == uid {
-			validAdmin = true
-			break
-		}
-	}
-	if !validAdmin {
+	if ok := g.HasAdmin(uid); !ok {
 		render.Render(w, r, ErrAuth(errors.New("not authorized for this group")))
+		return
 	}
 
 	// setup users
@@ -198,10 +193,21 @@ func CreateGroupInvite(w http.ResponseWriter, r *http.Request) {
 	for _, u := range userIDs.InsertedIDs {
 		if u, ok := u.(primitive.ObjectID); ok {
 			jwt := createTokenString(u.Hex(), 3*24*time.Hour) // expires in 3 days for "activate"
+			fmt.Sprint(jwt)
 		}
 		// TODO send email??
 	}
 
 	render.Status(r, http.StatusCreated)
 	render.Render(w, r, NewGroupInviteResponse())
+}
+
+// HasAdmin checks whether or not a user is admin of a group
+func (g Group) HasAdmin(uid primitive.ObjectID) bool {
+	for _, u := range g.Admins {
+		if u == uid {
+			return true
+		}
+	}
+	return false
 }

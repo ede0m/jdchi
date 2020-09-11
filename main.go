@@ -32,7 +32,7 @@ func main() {
 			r.Use(jwtauth.Authenticator)
 
 			r.Post("/master", CreateMasterSchedule)
-			r.Get("/master", GetMasterSchedule)
+			r.Get("/master/{groupID}", GetMasterSchedule)
 		})
 	})
 
