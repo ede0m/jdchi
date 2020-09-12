@@ -1,4 +1,5 @@
 config.go
+mailer/config.go
 
 .vscode
 *.exe

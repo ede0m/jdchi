@@ -2,9 +2,10 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
+
+	jdchaimailer "github.com/ede0m/jdchai/mailer"
 
 	"github.com/go-chi/jwtauth"
 	"github.com/go-chi/render"
@@ -170,34 +171,22 @@ func CreateGroupInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup users
-	var users []*User
+	// create users and email in mailer thread
 	rr := RegisterRequest{"", "", "", "password", gid}
 	for _, m := range data.MemberEmails {
 		// TODO: verify email
 		rr.Email = m
 		u, err := NewUser(rr)
 		if err != nil {
-			render.Render(w, r, ErrServer(err))
+			render.Render(w, r, ErrInvalidRequest(err))
 			return
 		}
-		users = append(users, u)
-	}
-	// create users and add them to groups
-	userIDs, err := mh.InsertGroupUsers(users, gid)
-	if err != nil {
-		render.Render(w, r, ErrServer(err))
-		return
-	}
-	// TODO emails + jwt?
-	for _, u := range userIDs.InsertedIDs {
-		if u, ok := u.(primitive.ObjectID); ok {
-			jwt := createTokenString(u.Hex(), 3*24*time.Hour) // expires in 3 days for "activate"
-			fmt.Sprint(jwt)
+		uid, err := mh.InsertUser(u)
+		if uID, ok := uid.InsertedID.(primitive.ObjectID); ok {
+			jwt := createTokenString(uID.Hex(), 30*24*time.Hour) // expires in 30 days for "activate"
+			go jdchaimailer.SendWelcomRegistration(g.Name, u.Email, jwt)
 		}
-		// TODO send email??
 	}
-
 	render.Status(r, http.StatusCreated)
 	render.Render(w, r, NewGroupInviteResponse())
 }
