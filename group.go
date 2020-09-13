@@ -3,11 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
-	"time"
 
-	jdchaimailer "github.com/ede0m/jdchai/mailer"
-
-	"github.com/go-chi/jwtauth"
 	"github.com/go-chi/render"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -25,16 +21,6 @@ type Group struct {
 type GroupRequest struct {
 	Name        string   `json:"name"`
 	AdminEmails []string `json:"adminEmails"`
-}
-
-// GroupInviteRequest is a request to create users in a group and "invite" them
-type GroupInviteRequest struct {
-	GroupID      string   `json:"groupId"`
-	MemberEmails []string `json:"memberEmails"`
-}
-
-// GroupInviteResponse is a request to create users in a group and "invite" them
-type GroupInviteResponse struct {
 }
 
 // GroupResponse is a client response of a group
@@ -77,18 +63,8 @@ func NewGroupResponse(g Group) *GroupResponse {
 	return &GroupResponse{g.ID, g.Name}
 }
 
-// NewGroupInviteResponse returns a client response for a group
-func NewGroupInviteResponse() *GroupInviteResponse {
-	return &GroupInviteResponse{}
-}
-
 // Render is called in top-down order, like a http handler middleware chain.
 func (ur *GroupResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
-// Render is called in top-down order, like a http handler middleware chain.
-func (ur *GroupInviteResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
@@ -102,17 +78,6 @@ func (gr *GroupRequest) Bind(r *http.Request) error {
 		return errors.New("cannot have more than 5 admins")
 	} else if len(gr.AdminEmails) == 0 {
 		return errors.New("must have at least one admin")
-	}
-	return nil
-}
-
-// Bind binds the http req to GroupInviteRequest type as the render
-func (gr *GroupInviteRequest) Bind(r *http.Request) error {
-	if gr.GroupID == "" {
-		return errors.New("must specify group id")
-	}
-	if len(gr.MemberEmails) == 0 {
-		return errors.New("must have at least one member")
 	}
 	return nil
 }
@@ -139,56 +104,6 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 	g.ID = result
 	render.Status(r, http.StatusCreated)
 	render.Render(w, r, NewGroupResponse(*g))
-}
-
-/*CreateGroupInvite is used by a group admin to create accounts (that must not exist in the system)
-and add those accounts to a group. It will fire off emails for the user to "update" their account password
-and info (which will set activate)
-*/
-func CreateGroupInvite(w http.ResponseWriter, r *http.Request) {
-	data := &GroupInviteRequest{}
-	if err := render.Bind(r, data); err != nil {
-		render.Render(w, r, ErrInvalidRequest(err))
-		return
-	}
-	// find group
-	gid, err := primitive.ObjectIDFromHex(data.GroupID)
-	if err != nil {
-		render.Render(w, r, ErrInvalidRequest(err))
-		return
-	}
-	g := &Group{}
-	err = mh.GetGroup(g, bson.M{"_id": gid})
-	if err != nil {
-		render.Render(w, r, ErrNotFound(err))
-		return
-	}
-	// must be made by admin of group to create
-	_, claims, _ := jwtauth.FromContext(r.Context())
-	uid, _ := primitive.ObjectIDFromHex(claims["userID"].(string))
-	if ok := g.HasAdmin(uid); !ok {
-		render.Render(w, r, ErrAuth(errors.New("not authorized for this group")))
-		return
-	}
-
-	// create users and email in mailer thread
-	rr := RegisterRequest{"", "", "", "password", gid}
-	for _, m := range data.MemberEmails {
-		// TODO: verify email
-		rr.Email = m
-		u, err := NewUser(rr)
-		if err != nil {
-			render.Render(w, r, ErrInvalidRequest(err))
-			return
-		}
-		uid, err := mh.InsertUser(u)
-		if uID, ok := uid.InsertedID.(primitive.ObjectID); ok {
-			jwt := createTokenString(uID.Hex(), 30*24*time.Hour) // expires in 30 days for "activate"
-			go jdchaimailer.SendWelcomRegistration(g.Name, u.Email, jwt)
-		}
-	}
-	render.Status(r, http.StatusCreated)
-	render.Render(w, r, NewGroupInviteResponse())
 }
 
 // HasAdmin checks whether or not a user is admin of a group

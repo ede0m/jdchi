@@ -17,7 +17,6 @@ func main() {
 
 	defer mh.client.Disconnect(context.Background())
 
-	// set up routes
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(render.SetContentType(render.ContentTypeJSON))
@@ -41,15 +40,15 @@ func main() {
 		r.Use(jwtauth.Authenticator)
 		r.Route("/group", func(r chi.Router) {
 			r.Post("/", CreateGroup)
-			r.Post("/invitation", CreateGroupInvite)
+			r.Post("/invitation", CreateInvites)
 		})
 		r.Route("/user", func(r chi.Router) {
-			//r.Put("/", UpdateUser)
+			r.Patch("/invitation", AcceptSystemInvite)
 		})
 	})
 
-	r.Route("/auth", func(r chi.Router) {
-		r.Post("/login", LoginUser)
+	r.Route("/session", func(r chi.Router) {
+		r.Post("/", LoginUser)
 	})
 
 	http.ListenAndServe(":3000", r)

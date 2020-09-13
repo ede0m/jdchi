@@ -136,6 +136,15 @@ func (mh *MongoHandler) GetUser(u *User, filter interface{}) error {
 	return err
 }
 
+// UpdateUsers updates many with filter and condition
+func (mh *MongoHandler) UpdateUsers(filter interface{}, update interface{}) error {
+	collection := mh.client.Database(mh.database).Collection("user")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := collection.UpdateMany(ctx, filter, update)
+	return err
+}
+
 // GetUsers returns list of users specified by filter
 func (mh *MongoHandler) GetUsers(filter interface{}) ([]*User, error) {
 	collection := mh.client.Database(mh.database).Collection("user")

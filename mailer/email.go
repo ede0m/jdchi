@@ -74,3 +74,23 @@ func SendWelcomRegistration(group, email, token string) {
 		log.Println("welcome email template parse failed")
 	}
 }
+
+// SendGroupInvite sends a group invite welcome email
+func SendGroupInvite(group, name, email string) {
+	templateData := struct {
+		Group string
+		Name  string
+	}{
+		Group: group,
+		Name:  name,
+	}
+	address := []string{email}
+	r := NewEmailRequest(address, from, "Invited to JDScheduler Group: "+group, "")
+	if err := r.ParseTemplate("mailer/groupinvite.html", templateData); err == nil {
+		if _, err := r.SendEmail(); err != nil {
+			log.Println("smtp error: " + err.Error())
+		}
+	} else {
+		log.Println("group invite email template parse failed")
+	}
+}
