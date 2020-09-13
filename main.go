@@ -43,7 +43,7 @@ func main() {
 			r.Post("/invitation", CreateInvites)
 		})
 		r.Route("/user", func(r chi.Router) {
-			r.Patch("/invitation", AcceptSystemInvite)
+			r.Patch("/invitation", AcceptRegisterInvite)
 		})
 	})
 

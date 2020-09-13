@@ -115,7 +115,6 @@ func RegisterUser(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
-
 	u, err := NewUser(*data)
 	if err != nil {
 		render.Render(w, r, ErrServer(err))
