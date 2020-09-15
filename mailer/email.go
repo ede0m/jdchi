@@ -7,8 +7,8 @@ import (
 	"net/smtp"
 )
 
-var from = APIMailerAddress
-var auth smtp.Auth = smtp.PlainAuth("", APIMailerAddress, APIMailerPass, "smtp.gmail.com")
+var from string
+var smtpAuth smtp.Auth
 
 //EmailRequest struct
 type EmailRequest struct {
@@ -16,6 +16,12 @@ type EmailRequest struct {
 	to      []string
 	subject string
 	body    string
+}
+
+//Init will initalize the mailer package with auth
+func Init(auth smtp.Auth, mailer string) {
+	smtpAuth = auth
+	from = mailer
 }
 
 //NewEmailRequest constructor
@@ -30,12 +36,15 @@ func NewEmailRequest(to []string, from, subject, body string) *EmailRequest {
 
 //SendEmail smtp
 func (r *EmailRequest) SendEmail() (bool, error) {
+	if smtpAuth == nil {
+		log.Println("smtp error: missing service smtp auth!")
+	}
 	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
 	subject := "Subject: " + r.subject + "!\n"
 	msg := []byte(subject + mime + "\n" + r.body)
 	addr := "smtp.gmail.com:587"
 
-	if err := smtp.SendMail(addr, auth, r.from, r.to, msg); err != nil {
+	if err := smtp.SendMail(addr, smtpAuth, r.from, r.to, msg); err != nil {
 		return false, err
 	}
 	return true, nil

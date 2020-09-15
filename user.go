@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/render"
 )
 
-var tokenAuth *jwtauth.JWTAuth = jwtauth.New("HS256", []byte(JWTSecret), nil)
 var nilTime time.Time
 
 // User for login/register

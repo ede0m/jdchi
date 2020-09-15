@@ -136,7 +136,8 @@ func CreateInvites(w http.ResponseWriter, r *http.Request) {
 		uid, err := mh.InsertUser(u)
 		if uID, ok := uid.InsertedID.(primitive.ObjectID); ok {
 			jwt := createTokenString(uID.Hex(), 30*24*time.Hour) // expires in 30 days for "activate"
-			go jdchaimailer.SendWelcomRegistration(g.Name, u.Email, jwt)
+			link := clientBaseURL + "register?token=" + jwt + "&group=" + g.Name + "&groupID=" + g.ID.Hex()
+			go jdchaimailer.SendWelcomRegistration(g.Name, u.Email, link)
 		}
 	}
 	render.Status(r, http.StatusCreated)
@@ -164,6 +165,7 @@ func AcceptRegisterInvite(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
+	render.Status(r, http.StatusOK)
 	render.Render(w, r, NewAcceptRegisterInviteResponse())
 
 }

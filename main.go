@@ -3,21 +3,51 @@ package main
 import (
 	"context"
 	"net/http"
+	"net/smtp"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
 
+	jdchaimailer "github.com/ede0m/jdchai/mailer"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/jwtauth"
 	"github.com/go-chi/render"
+	"github.com/tkanos/gonfig"
 )
 
 // mongo client
 var mh = NewMongoHandler()
+var tokenAuth *jwtauth.JWTAuth
+var smtpAuth smtp.Auth
+var host string
+var port string
+var clientBaseURL string
 
 func main() {
 
-	defer mh.client.Disconnect(context.Background())
+	// config
+	configuration := Configuration{}
+	err := gonfig.GetConf(getConfigFileName(), &configuration)
+	if err != nil {
+		panic(err)
+	}
 
+	host = configuration.APIBaseURL
+	port = configuration.APIPort
+	clientBaseURL = configuration.ClientBaseURL
+
+	// jwt setup
+	tokenAuth = jwtauth.New("HS256", []byte(configuration.JWTSecret), nil)
+
+	// mailer setup
+	smtpAuth = smtp.PlainAuth("", configuration.APIMailerAddress, configuration.APIMailerPassword, "smtp.gmail.com")
+	jdchaimailer.Init(smtpAuth, configuration.APIMailerAddress)
+
+	defer mh.client.Disconnect(context.Background())
 	r := chi.NewRouter()
 
 	// Basic CORS
@@ -26,7 +56,7 @@ func main() {
 		// AllowedOrigins: []string{"https://foo.com"}, // Use this to allow specific origin hosts
 		AllowedOrigins:   []string{"*"},
 		AllowOriginFunc:  AllowOriginFunc,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Timeout"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: false,
@@ -66,10 +96,22 @@ func main() {
 		r.Post("/", LoginUser)
 	})
 
-	http.ListenAndServe(":3000", r)
+	http.ListenAndServe(host+":"+port, r)
 }
 
 // AllowOriginFunc logic for cors
 func AllowOriginFunc(r *http.Request, origin string) bool {
 	return true
+}
+
+func getConfigFileName() string {
+	env := os.Getenv("ENV")
+	if len(env) == 0 {
+		env = "development"
+	}
+	filename := []string{"config/", "config.", env, ".json"}
+	_, dirname, _, _ := runtime.Caller(0)
+	filePath := path.Join(filepath.Dir(dirname), strings.Join(filename, ""))
+
+	return filePath
 }

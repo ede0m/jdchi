@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/tkanos/gonfig"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,17 +24,24 @@ type MongoHandler struct {
 //NewMongoHandler Constructor for MongoHandler
 func NewMongoHandler() *MongoHandler {
 
+	// config
+	configuration := Configuration{}
+	err := gonfig.GetConf(getConfigFileName(), &configuration)
+	if err != nil {
+		panic(err)
+	}
+
 	credential := options.Credential{
-		Username: MongoUser,
-		Password: MongoPass,
+		Username: configuration.MongoUser,
+		Password: configuration.MongoPass,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	clientOpts := options.Client().ApplyURI("mongodb://" + MongoHost + ":" + MongoPort).
+	clientOpts := options.Client().ApplyURI("mongodb://" + configuration.MongoHost + ":" + configuration.MongoPort).
 		SetAuth(credential).
-		SetReplicaSet(MongoReplicaSet)
+		SetReplicaSet(configuration.MongoReplicaSet)
 
 	client, err := mongo.Connect(ctx, clientOpts)
 	if err != nil {

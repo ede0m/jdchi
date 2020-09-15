@@ -1,4 +1,8 @@
-config.go
+config/
+config/*
+config.*.json
+config.json
+jdchai
 mailer/config.go
 
 .vscode
