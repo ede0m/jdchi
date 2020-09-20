@@ -45,9 +45,17 @@ type LoginRequest struct {
 
 // UserResponse a typical response for login/register
 type UserResponse struct {
-	FirstName string   `json:"firstName"`
-	Groups    []string `json:"groups"`
-	Token     string   `json:"token"`
+	FirstName string          `json:"firstName"`
+	LastName  string          `json:"lastName"`
+	Groups    []GroupResponse `json:"groups"`
+	Token     string          `json:"token"`
+}
+
+// GroupUserResponse is a group's representation of a user
+type GroupUserResponse struct {
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Email     string `json:"email"`
 }
 
 // NewUser constructor for a new User. hash password
@@ -71,12 +79,19 @@ func NewUser(rr RegisterRequest) (*User, error) {
 
 // NewUserResponse constructor for UserResponse
 func NewUserResponse(u User) *UserResponse {
-	var groups []string
-	for _, g := range u.Groups {
-		groups = append(groups, g.Hex())
+	var groups []GroupResponse
+	for _, gid := range u.Groups {
+		group := &Group{}
+		mh.GetGroup(group, bson.M{"_id": gid})
+		groups = append(groups, *NewGroupResponse(*group))
 	}
 	jwt := createTokenString(u.ID.Hex(), 15*time.Minute) // expires in 15 mins
-	return &UserResponse{u.FirstName, groups, jwt}
+	return &UserResponse{u.FirstName, u.LastName, groups, jwt}
+}
+
+// NewGroupUserResponse returns group user from a user
+func NewGroupUserResponse(u User) *GroupUserResponse {
+	return &GroupUserResponse{u.FirstName, u.LastName, u.Email}
 }
 
 // Render is called in top-down order, like a http handler middleware chain.

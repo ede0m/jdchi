@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -25,8 +26,14 @@ type GroupRequest struct {
 
 // GroupResponse is a client response of a group
 type GroupResponse struct {
-	ID   primitive.ObjectID `json:"id"`
-	Name string             `json:"name"`
+	ID            primitive.ObjectID `json:"id"`
+	Name          string             `json:"name"`
+	NParticipants int                `json:"nParticipants"`
+}
+
+// GroupUsersResponse response for all users in a group
+type GroupUsersResponse struct {
+	Members []GroupUserResponse `json:"members"`
 }
 
 // NewGroup creates a group with admins. will check that every listed admin exists
@@ -60,11 +67,25 @@ func NewGroup(gr GroupRequest) (*Group, error) {
 
 // NewGroupResponse returns a client response for a group
 func NewGroupResponse(g Group) *GroupResponse {
-	return &GroupResponse{g.ID, g.Name}
+	return &GroupResponse{g.ID, g.Name, len(g.Members)}
+}
+
+// NewGroupUsersResponse groupUser representation from user slice
+func NewGroupUsersResponse(users []*User) *GroupUsersResponse {
+	var groupUsers []GroupUserResponse
+	for _, u := range users {
+		groupUsers = append(groupUsers, *NewGroupUserResponse(*u))
+	}
+	return &GroupUsersResponse{groupUsers}
 }
 
 // Render is called in top-down order, like a http handler middleware chain.
-func (ur *GroupResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (gr *GroupResponse) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+// Render is called in top-down order, like a http handler middleware chain.
+func (gur *GroupUsersResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
@@ -83,6 +104,28 @@ func (gr *GroupRequest) Bind(r *http.Request) error {
 }
 
 ////////////  CONTROLLERS //////////////////
+
+func GetGroupUsers(w http.ResponseWriter, r *http.Request) {
+	gid := chi.URLParam(r, "groupID")
+	groupID, err := primitive.ObjectIDFromHex(gid)
+	if err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	g := &Group{}
+	err = mh.GetGroup(g, bson.M{"_id": groupID})
+	if err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+	users, err := mh.GetUsers(bson.M{"_id": bson.M{"$in": g.Members}})
+	if err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, NewGroupUsersResponse(users))
+}
 
 // CreateGroup creates a new group
 func CreateGroup(w http.ResponseWriter, r *http.Request) {

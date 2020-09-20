@@ -86,6 +86,7 @@ func main() {
 		r.Route("/group", func(r chi.Router) {
 			r.Post("/", CreateGroup)
 			r.Post("/invitation", CreateInvites)
+			r.Get("/{groupID}/user", GetGroupUsers)
 		})
 		r.Route("/user", func(r chi.Router) {
 			r.Patch("/invitation", AcceptRegisterInvite)

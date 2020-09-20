@@ -159,7 +159,7 @@ func (mh *MongoHandler) GetUsers(filter interface{}) ([]*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	projection := bson.D{{"email", 1}, {"_id", 1}} // set field to 1 to project
+	projection := bson.D{{"email", 1}, {"_id", 1}, {"firstName", 1}, {"lastName", 1}} // set field to 1 to project
 	cur, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
 	if err != nil {
 		return nil, err

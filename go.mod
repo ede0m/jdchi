@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/aokoli/goutils v1.1.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/ede0m/jdgoscheduler v0.0.0-20200904071344-59188c39c286
+	github.com/ede0m/jdgoscheduler v0.0.0-20200920183318-498b4e8e58f5
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.1.1
