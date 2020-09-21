@@ -13,6 +13,8 @@ github.com/ede0m/jdgoscheduler v0.0.0-20200904071344-59188c39c286 h1:t3EmwrVL1aG
 github.com/ede0m/jdgoscheduler v0.0.0-20200904071344-59188c39c286/go.mod h1:lLt9PA7+YtJ83NOcB0t7N+9FvFjWJB6RTqnCw2sXAac=
 github.com/ede0m/jdgoscheduler v0.0.0-20200920183318-498b4e8e58f5 h1:OFGBJXaTadEWGPNgJV9+XBL5jNvxqBMyPtWCAv3nsS0=
 github.com/ede0m/jdgoscheduler v0.0.0-20200920183318-498b4e8e58f5/go.mod h1:lLt9PA7+YtJ83NOcB0t7N+9FvFjWJB6RTqnCw2sXAac=
+github.com/ede0m/jdgoscheduler v0.0.0-20200921052927-2d7cd2be2a09 h1:dJSNoRxyaLaW/uGywI2kd2xIfpc/u4f17iF/4r77KF8=
+github.com/ede0m/jdgoscheduler v0.0.0-20200921052927-2d7cd2be2a09/go.mod h1:lLt9PA7+YtJ83NOcB0t7N+9FvFjWJB6RTqnCw2sXAac=
 github.com/eknkc/amber v0.0.0-20171010120322-cdade1c07385/go.mod h1:0vRUJqYpeSZifjYj7uP3BG/gKcuzL9xWVV/Y+cK33KM=
 github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=

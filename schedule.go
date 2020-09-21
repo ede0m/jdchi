@@ -130,8 +130,11 @@ func GenerateSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	start, wksPSeason, nSeason, participants := data.StartDate, data.SeasonWeeks, data.Years, data.Participants
-	s := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
-
+	s, err := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
+	if err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, NewScheduleResponse(*s))
 }
