@@ -51,14 +51,6 @@ type ScheduleRequest struct {
 // NewMasterSchedule creates a new master schedule
 func NewMasterSchedule(s jdscheduler.Schedule, groupID primitive.ObjectID) (*MasterSchedule, error) {
 
-	// check that all participants exist in system
-	u := &User{}
-	for _, p := range s.Participants {
-		err := mh.GetUser(u, bson.M{"email": p})
-		if err != nil {
-			return nil, errors.New("participant " + p + "  not found in system")
-		}
-	}
 	// TODO: get scheudle's scheudler pick order state, create trade log
 	ms := &MasterSchedule{primitive.NilObjectID, s, time.Now(), groupID}
 	return ms, nil

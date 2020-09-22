@@ -3,7 +3,10 @@ package main
 import (
 	"errors"
 	"net/http"
+	"time"
 
+	jdchaimailer "github.com/ede0m/jdchai/mailer"
+	jdscheduler "github.com/ede0m/jdgoscheduler"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
 	"go.mongodb.org/mongo-driver/bson"
@@ -20,8 +23,10 @@ type Group struct {
 
 // GroupRequest is a request to create a new group
 type GroupRequest struct {
-	Name        string   `json:"name"`
-	AdminEmails []string `json:"adminEmails"`
+	Name         string               `json:"name"`
+	AdminEmails  []string             `json:"adminEmails"`
+	MemberEmails []string             `json:"memberEmails"`
+	Schedule     jdscheduler.Schedule `json:"schedule"`
 }
 
 // GroupResponse is a client response of a group
@@ -44,7 +49,7 @@ func NewGroup(gr GroupRequest) (*Group, error) {
 		return nil, err
 	}
 	if len(foundUsers) != len(gr.AdminEmails) {
-		return nil, errors.New("one or more emails not found in system")
+		return nil, errors.New("one or more admin emails not found in system")
 	}
 
 	g := &Group{}
@@ -53,15 +58,13 @@ func NewGroup(gr GroupRequest) (*Group, error) {
 		return nil, errors.New("group name: " + gr.Name + " aready exists")
 	}
 
-	var adminIds []primitive.ObjectID
+	adminIds := make([]primitive.ObjectID, 0)
 	for _, u := range foundUsers {
 		adminIds = append(adminIds, u.ID)
 	}
-	// set members as admins initially
-	members := make([]primitive.ObjectID, len(adminIds))
-	copy(members, adminIds)
-
-	group := &Group{primitive.NilObjectID, gr.Name, adminIds, members}
+	// members empty initially because we may need to create new users
+	memberIds := make([]primitive.ObjectID, 0)
+	group := &Group{primitive.NilObjectID, gr.Name, adminIds, memberIds}
 	return group, nil
 }
 
@@ -94,17 +97,21 @@ func (gr *GroupRequest) Bind(r *http.Request) error {
 
 	if gr.Name == "" {
 		return errors.New("group must have a name")
-	}
-	if len(gr.AdminEmails) > 5 {
+	} else if len(gr.AdminEmails) > 5 {
 		return errors.New("cannot have more than 5 admins")
 	} else if len(gr.AdminEmails) == 0 {
 		return errors.New("must have at least one admin")
+	} else if len(gr.MemberEmails) == 0 {
+		return errors.New("must have at least one member")
+	} else if len(gr.Schedule.Participants) == 0 {
+		return errors.New("must submit with valid schedule")
 	}
 	return nil
 }
 
 ////////////  CONTROLLERS //////////////////
 
+// GetGroupUsers gets users in a group
 func GetGroupUsers(w http.ResponseWriter, r *http.Request) {
 	gid := chi.URLParam(r, "groupID")
 	groupID, err := primitive.ObjectIDFromHex(gid)
@@ -129,24 +136,70 @@ func GetGroupUsers(w http.ResponseWriter, r *http.Request) {
 
 // CreateGroup creates a new group
 func CreateGroup(w http.ResponseWriter, r *http.Request) {
+
 	data := &GroupRequest{}
 	if err := render.Bind(r, data); err != nil {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
+
 	g, err := NewGroup(*data)
 	if err != nil {
 		render.Render(w, r, ErrNotFound(err))
 		return
 	}
-	result, err := mh.InsertGroup(g)
+
+	ms, err := NewMasterSchedule(data.Schedule, primitive.NilObjectID)
+	if err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+
+	// get users already in system
+	existingUsers := make([]*User, 0)
+	newUsers := make([]*User, 0)
+	rr := RegisterRequest{"", "", "", "mehpwd", primitive.NilObjectID} //TODO randomize
+	for _, addr := range data.MemberEmails {
+		// TODO: verify email
+		rr.Email = addr
+		u, err := NewUser(rr)
+		if err != nil {
+			if u != nil {
+				// user exists
+				existingUsers = append(existingUsers, u)
+				continue
+			} else {
+				render.Render(w, r, ErrInvalidRequest(err))
+				return
+			}
+		}
+		// user not in system, so we create
+		newUsers = append(newUsers, u)
+	}
+
+	result, err := mh.InsertGroup(g, ms, newUsers, existingUsers)
 	if err != nil {
 		render.Render(w, r, ErrServer(err))
 		return
 	}
-	g.ID = result
+
+	group := &Group{}
+	mh.GetGroup(group, bson.M{"_id": result})
+
+	// send out invites
+	for _, u := range existingUsers {
+		go jdchaimailer.SendGroupInvite(group.Name, u.FirstName, u.Email)
+	}
+	for _, u := range newUsers {
+		err := mh.GetUser(u, bson.M{"email": u.Email})
+		if err == nil {
+			jwt := createTokenString(u.ID.Hex(), 30*24*time.Hour) // expires in 30 days for "activate"
+			link := clientBaseURL + "register?token=" + jwt + "&group=" + group.Name + "&groupID=" + group.ID.Hex()
+			go jdchaimailer.SendWelcomRegistration(group.Name, u.Email, link)
+		}
+	}
 	render.Status(r, http.StatusCreated)
-	render.Render(w, r, NewGroupResponse(*g))
+	render.Render(w, r, NewGroupResponse(*group))
 }
 
 // HasAdmin checks whether or not a user is admin of a group

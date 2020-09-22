@@ -187,11 +187,17 @@ func (mh *MongoHandler) GetGroup(g *Group, filter interface{}) error {
 	return err
 }
 
-// InsertGroup create new group and adds group to all admin user's groups in transaction
-func (mh *MongoHandler) InsertGroup(g *Group) (primitive.ObjectID, error) {
+// InsertGroup create new users if needed, creates a group with all members, adds groups to each member,
+//  then creates the group schedule in transaction
+func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*User, existingUsers []*User) (primitive.ObjectID, error) {
 	collectionGroup := mh.client.Database(mh.database).Collection("group")
 	collectionUser := mh.client.Database(mh.database).Collection("user")
+	collectionSchedule := mh.client.Database(mh.database).Collection("schedule")
 
+	var manyNew []interface{}
+	for _, u := range newUsers {
+		manyNew = append(manyNew, u)
+	}
 	var session mongo.Session
 	var err error
 	if session, err = mh.client.StartSession(); err != nil {
@@ -203,24 +209,59 @@ func (mh *MongoHandler) InsertGroup(g *Group) (primitive.ObjectID, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	var users []primitive.ObjectID
 	groupID := primitive.NilObjectID
 	if err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+
+		// create new users
+		if manyNew != nil {
+			usersNew, err := collectionUser.InsertMany(ctx, manyNew)
+			if err != nil {
+				return err
+			}
+			// merge new users with existing
+			for _, nID := range usersNew.InsertedIDs {
+				nOID := nID.(primitive.ObjectID)
+				users = append(users, nOID)
+			}
+		}
+
+		for _, u := range existingUsers {
+			users = append(users, u.ID)
+		}
+
 		// create the group
-		result, err := collectionGroup.InsertOne(ctx, g)
+		group, err := collectionGroup.InsertOne(sc, g)
 		if err != nil {
 			return err
 		}
-		// add group to all members
-		groupID = result.InsertedID.(primitive.ObjectID)
-		var update = bson.D{{Key: "$addToSet", Value: bson.D{{Key: "groups", Value: groupID}}}}
-		for _, mID := range g.Members {
+
+		// add group to members
+		groupID = group.InsertedID.(primitive.ObjectID)
+		var update = bson.M{"$addToSet": bson.M{"groups": groupID}}
+		for _, mID := range users {
 			if _, err := collectionUser.UpdateOne(sc, bson.M{"_id": mID}, update); err != nil {
 				return err
 			}
 		}
+
+		// add members to group
+		update = bson.M{"$addToSet": bson.M{"members": bson.M{"$each": users}}}
+		if _, err := collectionGroup.UpdateOne(sc, bson.M{"_id": groupID}, update); err != nil {
+			return err
+		}
+
+		// create the schedule
+		sch.GroupID = groupID
+		if _, err := collectionSchedule.InsertOne(sc, sch); err != nil {
+			return err
+		}
+
 		if err = session.CommitTransaction(sc); err != nil {
 			return err
 		}
+
 		return nil
 	}); err != nil {
 		return primitive.NilObjectID, err
