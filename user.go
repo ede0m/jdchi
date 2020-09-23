@@ -47,6 +47,7 @@ type LoginRequest struct {
 type UserResponse struct {
 	FirstName string          `json:"firstName"`
 	LastName  string          `json:"lastName"`
+	Email     string          `json:"email"`
 	Groups    []GroupResponse `json:"groups"`
 	Token     string          `json:"token"`
 }
@@ -88,7 +89,7 @@ func NewUserResponse(u User) *UserResponse {
 		}
 	}
 	jwt := createTokenString(u.ID.Hex(), 15*time.Minute) // expires in 15 mins
-	return &UserResponse{u.FirstName, u.LastName, groups, jwt}
+	return &UserResponse{u.FirstName, u.LastName, u.Email, groups, jwt}
 }
 
 // NewGroupUserResponse returns group user from a user
