@@ -211,3 +211,13 @@ func (g Group) HasAdmin(uid primitive.ObjectID) bool {
 	}
 	return false
 }
+
+// HasUser checks whether or not a user is admin of a group
+func (g Group) HasUser(uid primitive.ObjectID) bool {
+	for _, u := range g.Members {
+		if u == uid {
+			return true
+		}
+	}
+	return false
+}

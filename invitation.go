@@ -28,12 +28,10 @@ type AcceptRegisterInviteRequest struct {
 }
 
 // InviteResponse is a request to create users in a group and "invite" them to system
-type InviteResponse struct {
-}
+type InviteResponse struct{}
 
 // AcceptRegisterInviteResponse is a request to create users in a group and "invite" them
-type AcceptRegisterInviteResponse struct {
-}
+type AcceptRegisterInviteResponse struct{}
 
 // Bind binds the http req to SystemInviteRequest type as the render
 func (si *InviteRequest) Bind(r *http.Request) error {

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -50,12 +52,66 @@ type FinalizeTradeRequest struct {
 	Action     bool   `json:"action"` // 0 decline, 1 accept
 }
 
-func NewTrade(tr *TradeRequest) *Trade {
-	// TODO check schedule exists
-	// TODO check participants exist and that they belong to schedule
-	// TODO check all initiator trades belong to initiator
-	// TODO check all executor trades belong to executor
-	return nil
+// NewTrade creates a new trade once passing domain validation checks
+func NewTrade(tr *TradeRequest) (*Trade, error) {
+
+	schID, err := primitive.ObjectIDFromHex(tr.ScheduleID)
+	if err != nil {
+		return nil, err
+	}
+	// check schedule exists
+	sch := &MasterSchedule{}
+	err = mh.GetMasterSchedule(sch, bson.M{"_id": schID})
+	if err != nil {
+		return nil, err
+	}
+	// check users exist
+	initUser, execUser := &User{}, &User{}
+	err = mh.GetUser(initUser, bson.M{"email": tr.InitiatorEmail})
+	if err != nil {
+		return nil, err
+	}
+	err = mh.GetUser(execUser, bson.M{"email": tr.ExecutorEmail})
+	if err != nil {
+		return nil, err
+	}
+
+	// users belong to group
+	g := &Group{}
+	err = mh.GetGroup(g, bson.M{"_id": sch.GroupID})
+	if err != nil {
+		return nil, err
+	}
+	if !g.HasUser(initUser.ID) || !g.HasUser(execUser.ID) {
+		return nil, errors.New("one trade member does not belong to group")
+	}
+
+	schUnitMemberMap := make(map[string]string)
+	initTrades, execTrades := []uuid.UUID{}, []uuid.UUID{}
+
+	for _, guid := range tr.InitiatorTrades {
+		initTrades = append(initTrades, uuid.MustParse(guid))
+		schUnitMemberMap[guid] = tr.InitiatorEmail
+	}
+	for _, guid := range tr.ExecutorTrades {
+		execTrades = append(execTrades, uuid.MustParse(guid))
+		schUnitMemberMap[guid] = tr.ExecutorEmail
+	}
+
+	// TODO speed this up: maybe make a flat map right onto the doc?
+	for _, s := range sch.Schedule.Seasons {
+		for _, b := range s.Blocks {
+			for _, unit := range b.Weeks {
+				if owner, ok := schUnitMemberMap[unit.ID.String()]; ok {
+					if unit.Participant != owner {
+						return nil, errors.New(unit.ID.String() + " not owned by " + owner)
+					}
+				}
+			}
+		}
+	}
+
+	return &Trade{primitive.NilObjectID, time.Now(), tr.InitiatorEmail, tr.ExecutorEmail, initTrades, execTrades, Void}, nil
 }
 
 func FinalizeTrade() {
