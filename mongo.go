@@ -59,10 +59,39 @@ func NewMongoHandler() *MongoHandler {
 
 // InsertMasterSchedule inserts one master schedule into scheudle colletion
 func (mh *MongoHandler) InsertMasterSchedule(ms *MasterSchedule) (*mongo.InsertOneResult, error) {
-	collection := mh.client.Database(mh.database).Collection("schedule")
+	collectionSch := mh.client.Database(mh.database).Collection("schedule")
+	collectionLedger := mh.client.Database(mh.database).Collection("ledger")
+
+	var session mongo.Session
+	var err error
+	if session, err = mh.client.StartSession(); err != nil {
+		return nil, errors.New("session error")
+	}
+	if err := session.StartTransaction(); err != nil {
+		return nil, errors.New("tx group error")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := collection.InsertOne(ctx, ms)
+	var result *mongo.InsertOneResult
+	if err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+		// create master schedule
+		result, err = collectionSch.InsertOne(sc, ms)
+		if err != nil {
+			return err
+		}
+		// create an empty schedule trade ledger
+		l := Ledger{result.InsertedID.(primitive.ObjectID), []Trade{}}
+		if _, err := collectionLedger.InsertOne(sc, l); err != nil {
+			return err
+		}
+		if err = session.CommitTransaction(sc); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	session.EndSession(ctx)
 	return result, err
 }
 
@@ -193,6 +222,7 @@ func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*U
 	collectionGroup := mh.client.Database(mh.database).Collection("group")
 	collectionUser := mh.client.Database(mh.database).Collection("user")
 	collectionSchedule := mh.client.Database(mh.database).Collection("schedule")
+	collectionLedger := mh.client.Database(mh.database).Collection("ledger")
 
 	var manyNew []interface{}
 	for _, u := range newUsers {
@@ -254,7 +284,14 @@ func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*U
 
 		// create the schedule
 		sch.GroupID = groupID
-		if _, err := collectionSchedule.InsertOne(sc, sch); err != nil {
+		schInserted, err := collectionSchedule.InsertOne(sc, sch)
+		if err != nil {
+			return err
+		}
+
+		// create an empty schedule trade ledger
+		l := Ledger{schInserted.InsertedID.(primitive.ObjectID), []Trade{}}
+		if _, err := collectionLedger.InsertOne(sc, l); err != nil {
 			return err
 		}
 
