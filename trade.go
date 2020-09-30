@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"net/http"
 	"time"
 
+	"github.com/go-chi/render"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -52,6 +54,38 @@ type FinalizeTradeRequest struct {
 	Action     bool   `json:"action"` // 0 decline, 1 accept
 }
 
+// TradeResponse client response for a created trade
+type TradeResponse struct {
+	Trade Trade `json:"trade"`
+}
+
+// Bind binds the http req to groupRequest type as the render
+func (tr *TradeRequest) Bind(r *http.Request) error {
+
+	if tr.ScheduleID == "" {
+		return errors.New("missing scheduleID")
+	} else if tr.InitiatorEmail == "" {
+		return errors.New("missing initiator email")
+	} else if tr.ExecutorEmail == "" {
+		return errors.New("missing executor email")
+	} else if len(tr.InitiatorTrades) == 0 {
+		return errors.New("must have at least one trade away")
+	} else if len(tr.ExecutorTrades) == 0 {
+		return errors.New("must have at least one trade for")
+	}
+	return nil
+}
+
+// Render is called in top-down order, like a http handler middleware chain.
+func (tr *TradeResponse) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+// NewTradeResponse returns a client response for a trade
+func NewTradeResponse(t Trade) *TradeResponse {
+	return &TradeResponse{t}
+}
+
 // NewTrade creates a new trade once passing domain validation checks
 func NewTrade(tr *TradeRequest) (*Trade, error) {
 
@@ -86,32 +120,53 @@ func NewTrade(tr *TradeRequest) (*Trade, error) {
 		return nil, errors.New("one trade member does not belong to group")
 	}
 
-	schUnitMemberMap := make(map[string]string)
+	// check that initiator trades belong to initiator
 	initTrades, execTrades := []uuid.UUID{}, []uuid.UUID{}
-
 	for _, guid := range tr.InitiatorTrades {
 		initTrades = append(initTrades, uuid.MustParse(guid))
-		schUnitMemberMap[guid] = tr.InitiatorEmail
+		if v, ok := sch.OwnerMap[guid]; ok {
+			if v.Owner != tr.InitiatorEmail {
+				return nil, errors.New(guid + " not owned by " + tr.InitiatorEmail)
+			}
+		}
 	}
+	// check that executor trades belong to executor
 	for _, guid := range tr.ExecutorTrades {
 		execTrades = append(execTrades, uuid.MustParse(guid))
-		schUnitMemberMap[guid] = tr.ExecutorEmail
-	}
-
-	// TODO speed this up: maybe make a flat map right onto the doc?
-	for _, s := range sch.Schedule.Seasons {
-		for _, b := range s.Blocks {
-			for _, unit := range b.Weeks {
-				if owner, ok := schUnitMemberMap[unit.ID.String()]; ok {
-					if unit.Participant != owner {
-						return nil, errors.New(unit.ID.String() + " not owned by " + owner)
-					}
-				}
+		if v, ok := sch.OwnerMap[guid]; ok {
+			if v.Owner != tr.ExecutorEmail {
+				return nil, errors.New(guid + " not owned by " + tr.ExecutorEmail)
 			}
 		}
 	}
 
-	return &Trade{primitive.NilObjectID, time.Now(), tr.InitiatorEmail, tr.ExecutorEmail, initTrades, execTrades, Void}, nil
+	return &Trade{primitive.NewObjectID(), time.Now(), tr.InitiatorEmail, tr.ExecutorEmail, initTrades, execTrades, Open}, nil
+}
+
+// CreateTrade creates a new trade
+func CreateTrade(w http.ResponseWriter, r *http.Request) {
+	data := &TradeRequest{}
+	if err := render.Bind(r, data); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	trade, err := NewTrade(data)
+	if err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+
+	schID, err := primitive.ObjectIDFromHex(data.ScheduleID)
+	if err != nil {
+		render.Render(w, r, ErrServer(err))
+		return
+	}
+	if err = mh.InsertTrade(trade, schID); err != nil {
+		render.Render(w, r, ErrServer(err))
+		return
+	}
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, NewTradeResponse(*trade))
 }
 
 func FinalizeTrade() {

@@ -15,18 +15,28 @@ import (
 
 // MasterSchedule is a jdscheudler output that is returned to all users
 type MasterSchedule struct {
-	ID        primitive.ObjectID   `json:"id" bson:"_id,omitempty"`
-	Schedule  jdscheduler.Schedule `json:"schedule" bson:"schedule"`
-	CreatedAt time.Time            `json:"createdAt" bson:"createdAt"`
-	GroupID   primitive.ObjectID   `json:"groupId" bson:"groupId"`
+	ID        primitive.ObjectID         `json:"id" bson:"_id,omitempty"`
+	Schedule  jdscheduler.Schedule       `json:"schedule" bson:"schedule"`
+	OwnerMap  map[string]ScheduleMapUnit `json:"ownerMap" bson:"ownerMap"`
+	CreatedAt time.Time                  `json:"createdAt" bson:"createdAt"`
+	GroupID   primitive.ObjectID         `json:"groupId" bson:"groupId"`
 
 	// TODO persist pick orders
 	// TODO persist trade log
 }
 
+// ScheduleMapUnit is a value of the MasterSchedule's OwnerMap
+type ScheduleMapUnit struct {
+	Owner       string `json:"owner" bson:"owner"`
+	MapIndicies []int  `json:"mapIndicies" bson:"mapIndicies"`
+}
+
 // MasterScheduleResponse is the response payload for MasterSchedule data model.
 type MasterScheduleResponse struct {
-	MasterSchedule MasterSchedule `json:"masterSchedule"`
+	ID        primitive.ObjectID   `json:"id"`
+	Schedule  jdscheduler.Schedule `json:"schedule"`
+	CreatedAt time.Time            `json:"createdAt"`
+	GroupID   primitive.ObjectID   `json:"groupId" `
 }
 
 // ScheduleResponse is the request payload for Scheudle data model.
@@ -37,7 +47,7 @@ type ScheduleResponse struct {
 // MasterScheduleRequest is the request payload for creating master schedules for a group
 type MasterScheduleRequest struct {
 	Schedule jdscheduler.Schedule `json:"schedule"`
-	GroupID  string
+	GroupID  string               `json:"groupId"`
 }
 
 // ScheduleRequest is the request payload for generating schedules against the jdscheduler module
@@ -49,16 +59,25 @@ type ScheduleRequest struct {
 }
 
 // NewMasterSchedule creates a new master schedule
-func NewMasterSchedule(s jdscheduler.Schedule, groupID primitive.ObjectID) (*MasterSchedule, error) {
+func NewMasterSchedule(sch jdscheduler.Schedule, groupID primitive.ObjectID) (*MasterSchedule, error) {
 
+	ownerMap := make(map[string]ScheduleMapUnit)
+	for i, s := range sch.Seasons {
+		for j, b := range s.Blocks {
+			for k, unit := range b.Weeks {
+				scm := ScheduleMapUnit{unit.Participant, []int{i, j, k}}
+				ownerMap[unit.ID.String()] = scm
+			}
+		}
+	}
 	// TODO: get scheudle's scheudler pick order state, create trade log
-	ms := &MasterSchedule{primitive.NilObjectID, s, time.Now(), groupID}
+	ms := &MasterSchedule{primitive.NilObjectID, sch, ownerMap, time.Now(), groupID}
 	return ms, nil
 }
 
 // NewMasterScheduleResponse creates a new master schedule
 func NewMasterScheduleResponse(ms MasterSchedule) *MasterScheduleResponse {
-	msr := &MasterScheduleResponse{MasterSchedule: ms}
+	msr := &MasterScheduleResponse{ID: ms.ID, Schedule: ms.Schedule, CreatedAt: ms.CreatedAt, GroupID: ms.GroupID}
 	return msr
 }
 

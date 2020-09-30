@@ -306,3 +306,15 @@ func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*U
 	session.EndSession(ctx)
 	return groupID, nil
 }
+
+// InsertTrade inserts one master schedule into ledger colletion
+func (mh *MongoHandler) InsertTrade(t *Trade, schID primitive.ObjectID) error {
+	collection := mh.client.Database(mh.database).Collection("ledger")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	update := bson.M{"$addToSet": bson.M{"trades": t}}
+	if _, err := collection.UpdateOne(ctx, bson.M{"scheduleId": schID}, update); err != nil {
+		return err
+	}
+	return nil
+}
