@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -32,12 +33,6 @@ type Trade struct {
 	Status          TradeStatus        `json:"status" bson:"status"`
 }
 
-// Ledger a log of trades assoicated with a schedule
-type Ledger struct {
-	ScheduleID primitive.ObjectID `json:"scheduleId" bson:"scheduleId"`
-	Trades     []Trade            `json:"trades" bson:"trades"`
-}
-
 // TradeRequest for creating a new trade
 type TradeRequest struct {
 	ScheduleID      string   `json:"scheduleId"`
@@ -57,6 +52,18 @@ type FinalizeTradeRequest struct {
 // TradeResponse client response for a created trade
 type TradeResponse struct {
 	Trade Trade `json:"trade"`
+}
+
+// UserTradesResponse shows a user's trades across groups
+type UserTradesResponse struct {
+	UserGroupTrades map[string]GroupTrades `json:"userGroupTrades"`
+}
+
+// GroupTrades monog aggregate query for user's group trades
+type GroupTrades struct {
+	ScheduleID primitive.ObjectID `json:"scheduleID" bson:"_id"`
+	GroupID    primitive.ObjectID `json:"groupId" bson:"groupId"`
+	Trades     []Trade            `json:"trades" bson:"trades"`
 }
 
 // Bind binds the http req to groupRequest type as the render
@@ -81,9 +88,28 @@ func (tr *TradeResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// Render is called in top-down order, like a http handler middleware chain.
+func (tr *UserTradesResponse) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
 // NewTradeResponse returns a client response for a trade
 func NewTradeResponse(t Trade) *TradeResponse {
 	return &TradeResponse{t}
+}
+
+// NewUserTradesResponse creates a client response obj for a user's trade
+func NewUserTradesResponse(gt []GroupTrades) *UserTradesResponse {
+
+	userGroupTrades := make(map[string]GroupTrades)
+	// TODO: parse to map
+	for _, g := range gt {
+		gid := g.GroupID.Hex()
+		if _, found := userGroupTrades[gid]; !found {
+			userGroupTrades[gid] = g
+		}
+	}
+	return &UserTradesResponse{userGroupTrades}
 }
 
 // NewTrade creates a new trade once passing domain validation checks
@@ -174,4 +200,22 @@ func FinalizeTrade() {
 	// TODO: void out ALL/ANY other trades that share any traded units (uuids)
 	// TODO: update this trade status.
 	// TODO: reflect trade in schedule
+}
+
+// GetUserTrades gets all trades belonging to a user's current groups
+func GetUserTrades(w http.ResponseWriter, r *http.Request) {
+	uid := chi.URLParam(r, "userID")
+	uID, err := primitive.ObjectIDFromHex(uid)
+	if err != nil {
+		return
+	}
+	user := &User{}
+	if err := mh.GetUser(user, bson.M{"_id": uID}); err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+
+	userGroupsTrades := mh.GetActiveScheduleUserTrades(user.Groups)
+	render.Status(r, http.StatusOK)
+	render.Render(w, r, NewUserTradesResponse(userGroupsTrades))
 }

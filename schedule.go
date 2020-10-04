@@ -15,11 +15,12 @@ import (
 
 // MasterSchedule is a jdscheudler output that is returned to all users
 type MasterSchedule struct {
-	ID        primitive.ObjectID         `json:"id" bson:"_id,omitempty"`
-	Schedule  jdscheduler.Schedule       `json:"schedule" bson:"schedule"`
-	OwnerMap  map[string]ScheduleMapUnit `json:"ownerMap" bson:"ownerMap"`
-	CreatedAt time.Time                  `json:"createdAt" bson:"createdAt"`
-	GroupID   primitive.ObjectID         `json:"groupId" bson:"groupId"`
+	ID          primitive.ObjectID         `json:"id" bson:"_id,omitempty"`
+	Schedule    jdscheduler.Schedule       `json:"schedule" bson:"schedule"`
+	OwnerMap    map[string]ScheduleMapUnit `json:"ownerMap" bson:"ownerMap"`
+	TradeLedger []Trade                    `json:"tradeLedger" bson:"tradeLedger"`
+	CreatedAt   time.Time                  `json:"createdAt" bson:"createdAt"`
+	GroupID     primitive.ObjectID         `json:"groupId" bson:"groupId"`
 
 	// TODO persist pick orders
 	// TODO persist trade log
@@ -71,7 +72,7 @@ func NewMasterSchedule(sch jdscheduler.Schedule, groupID primitive.ObjectID) (*M
 		}
 	}
 	// TODO: get scheudle's scheudler pick order state, create trade log
-	ms := &MasterSchedule{primitive.NilObjectID, sch, ownerMap, time.Now(), groupID}
+	ms := &MasterSchedule{primitive.NilObjectID, sch, ownerMap, []Trade{}, time.Now(), groupID}
 	return ms, nil
 }
 

@@ -90,6 +90,7 @@ func main() {
 		})
 		r.Route("/user", func(r chi.Router) {
 			r.Patch("/invitation", AcceptRegisterInvite)
+			r.Get("/{userID}/trade", GetUserTrades)
 		})
 		r.Route("/trade", func(r chi.Router) {
 			r.Post("/", CreateTrade)

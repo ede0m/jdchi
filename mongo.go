@@ -60,7 +60,6 @@ func NewMongoHandler() *MongoHandler {
 // InsertMasterSchedule inserts one master schedule into scheudle colletion
 func (mh *MongoHandler) InsertMasterSchedule(ms *MasterSchedule) (*mongo.InsertOneResult, error) {
 	collectionSch := mh.client.Database(mh.database).Collection("schedule")
-	collectionLedger := mh.client.Database(mh.database).Collection("ledger")
 
 	var session mongo.Session
 	var err error
@@ -77,11 +76,6 @@ func (mh *MongoHandler) InsertMasterSchedule(ms *MasterSchedule) (*mongo.InsertO
 		// create master schedule
 		result, err = collectionSch.InsertOne(sc, ms)
 		if err != nil {
-			return err
-		}
-		// create an empty schedule trade ledger
-		l := Ledger{result.InsertedID.(primitive.ObjectID), []Trade{}}
-		if _, err := collectionLedger.InsertOne(sc, l); err != nil {
 			return err
 		}
 		if err = session.CommitTransaction(sc); err != nil {
@@ -222,7 +216,6 @@ func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*U
 	collectionGroup := mh.client.Database(mh.database).Collection("group")
 	collectionUser := mh.client.Database(mh.database).Collection("user")
 	collectionSchedule := mh.client.Database(mh.database).Collection("schedule")
-	collectionLedger := mh.client.Database(mh.database).Collection("ledger")
 
 	var manyNew []interface{}
 	for _, u := range newUsers {
@@ -284,14 +277,7 @@ func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*U
 
 		// create the schedule
 		sch.GroupID = groupID
-		schInserted, err := collectionSchedule.InsertOne(sc, sch)
-		if err != nil {
-			return err
-		}
-
-		// create an empty schedule trade ledger
-		l := Ledger{schInserted.InsertedID.(primitive.ObjectID), []Trade{}}
-		if _, err := collectionLedger.InsertOne(sc, l); err != nil {
+		if _, err := collectionSchedule.InsertOne(sc, sch); err != nil {
 			return err
 		}
 
@@ -309,12 +295,43 @@ func (mh *MongoHandler) InsertGroup(g *Group, sch *MasterSchedule, newUsers []*U
 
 // InsertTrade inserts one master schedule into ledger colletion
 func (mh *MongoHandler) InsertTrade(t *Trade, schID primitive.ObjectID) error {
-	collection := mh.client.Database(mh.database).Collection("ledger")
+	collection := mh.client.Database(mh.database).Collection("schedule")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	update := bson.M{"$addToSet": bson.M{"trades": t}}
-	if _, err := collection.UpdateOne(ctx, bson.M{"scheduleId": schID}, update); err != nil {
+	update := bson.M{"$addToSet": bson.M{"tradeLedger": t}}
+	if _, err := collection.UpdateOne(ctx, bson.M{"_id": schID}, update); err != nil {
 		return err
 	}
 	return nil
+}
+
+// GetActiveScheduleUserTrades returns a user's trades for all active user groups in groupIDs
+func (mh *MongoHandler) GetActiveScheduleUserTrades(groupIDs []primitive.ObjectID) []GroupTrades {
+	collection := mh.client.Database(mh.database).Collection("schedule")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	match := bson.M{"$match": bson.M{"groupId": bson.M{"$in": groupIDs}}}
+	sort := bson.M{"$sort": bson.M{"groupId": -1, "createdAt": -1}}
+	group := bson.M{"$group": bson.M{
+		"_id":    "$groupId",
+		"schId":  bson.M{"$first": "$_id"},
+		"trades": bson.M{"$first": "$tradeLedger"},
+	}}
+	project := bson.M{"$project": bson.M{"_id": "$schId", "groupId": "$_id", "trades": 1}}
+	pipeline := []bson.M{match, sort, group, project}
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		panic(err)
+	}
+	var groupsTrades []GroupTrades
+	for cursor.Next(ctx) {
+		gt := &GroupTrades{}
+		cursor.Decode(gt)
+		groupsTrades = append(groupsTrades, *gt)
+	}
+	if err := cursor.Close(ctx); err != nil {
+		panic(err)
+	}
+	return groupsTrades
 }
