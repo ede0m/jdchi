@@ -306,7 +306,7 @@ func (mh *MongoHandler) InsertTrade(t *Trade, schID primitive.ObjectID) error {
 }
 
 // GetActiveScheduleUserTrades returns a user's trades for all active user groups in groupIDs
-func (mh *MongoHandler) GetActiveScheduleUserTrades(groupIDs []primitive.ObjectID) []GroupTrades {
+func (mh *MongoHandler) GetActiveScheduleUserTrades(groupIDs []primitive.ObjectID, email string) []GroupTrades {
 	collection := mh.client.Database(mh.database).Collection("schedule")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -318,7 +318,18 @@ func (mh *MongoHandler) GetActiveScheduleUserTrades(groupIDs []primitive.ObjectI
 		"schId":  bson.M{"$first": "$_id"},
 		"trades": bson.M{"$first": "$tradeLedger"},
 	}}
-	project := bson.M{"$project": bson.M{"_id": "$schId", "groupId": "$_id", "trades": 1}}
+	project := bson.M{"$project": bson.M{
+		"_id":     "$schId",
+		"groupId": "$_id",
+		"trades": bson.M{"$filter": bson.M{
+			"input": "$trades",
+			"as":    "trade",
+			"cond": bson.M{"$or": bson.A{
+				bson.M{"$eq": bson.A{"$$trade.initiatorEmail", email}},
+				bson.M{"$eq": bson.A{"$$trade.executorEmail", email}},
+			}},
+		}},
+	}}
 	pipeline := []bson.M{match, sort, group, project}
 	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {

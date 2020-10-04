@@ -215,7 +215,7 @@ func GetUserTrades(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userGroupsTrades := mh.GetActiveScheduleUserTrades(user.Groups)
+	userGroupsTrades := mh.GetActiveScheduleUserTrades(user.Groups, user.Email)
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, NewUserTradesResponse(userGroupsTrades))
 }
