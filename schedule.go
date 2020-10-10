@@ -23,7 +23,6 @@ type MasterSchedule struct {
 	GroupID     primitive.ObjectID         `json:"groupId" bson:"groupId"`
 
 	// TODO persist pick orders
-	// TODO persist trade log
 }
 
 // ScheduleMapUnit is a value of the MasterSchedule's OwnerMap
@@ -170,7 +169,7 @@ func CreateMasterSchedule(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, ErrNotFound(err))
 		return
 	}
-	// scheudle must be created by admin of group
+	// schedule must be created by admin of group
 	_, claims, _ := jwtauth.FromContext(r.Context())
 	uid, _ := primitive.ObjectIDFromHex(claims["userID"].(string))
 	if ok := g.HasAdmin(uid); !ok {
@@ -209,3 +208,11 @@ func GetMasterSchedule(w http.ResponseWriter, r *http.Request) {
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, NewMasterScheduleResponse(*ms))
 }
+
+/*func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map[string]ScheduleMapUnit) {
+
+	sch := ms.Schedule
+	ownerMap := ms.OwnerMap
+	// deep copy so we don't overwrite references
+	return nil, nil
+}*/

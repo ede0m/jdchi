@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/jwtauth"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -20,6 +21,7 @@ const (
 	Open TradeStatus = iota
 	Executed
 	Void
+	Cancelled
 )
 
 // Trade entry
@@ -46,7 +48,7 @@ type TradeRequest struct {
 type FinalizeTradeRequest struct {
 	ScheduleID string `json:"scheduleId"`
 	TradeID    string `json:"tradeId"`
-	Action     bool   `json:"action"` // 0 decline, 1 accept
+	Action     int    `json:"action"` // 0 decline/cancel, 1 accept
 }
 
 // TradeResponse client response for a created trade
@@ -83,6 +85,19 @@ func (tr *TradeRequest) Bind(r *http.Request) error {
 	return nil
 }
 
+// Bind binds the http req to groupRequest type as the render
+func (ftr *FinalizeTradeRequest) Bind(r *http.Request) error {
+
+	if ftr.ScheduleID == "" {
+		return errors.New("missing scheduleID")
+	} else if ftr.TradeID == "" {
+		return errors.New("missing tradeID")
+	} else if ftr.Action != 0 && ftr.Action != 1 {
+		return errors.New("action should be 0 (decline/cancel) or 1 (accept)")
+	}
+	return nil
+}
+
 // Render is called in top-down order, like a http handler middleware chain.
 func (tr *TradeResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
@@ -113,12 +128,17 @@ func NewUserTradesResponse(gt []GroupTrades) *UserTradesResponse {
 }
 
 // NewTrade creates a new trade once passing domain validation checks
-func NewTrade(tr *TradeRequest) (*Trade, error) {
+func NewTrade(tr *TradeRequest, reqUserID string) (*Trade, error) {
 
 	schID, err := primitive.ObjectIDFromHex(tr.ScheduleID)
 	if err != nil {
 		return nil, err
 	}
+	reqUID, err := primitive.ObjectIDFromHex(reqUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	// check schedule exists
 	sch := &MasterSchedule{}
 	err = mh.GetMasterSchedule(sch, bson.M{"_id": schID})
@@ -134,6 +154,11 @@ func NewTrade(tr *TradeRequest) (*Trade, error) {
 	err = mh.GetUser(execUser, bson.M{"email": tr.ExecutorEmail})
 	if err != nil {
 		return nil, err
+	}
+
+	// check initiator is requestor
+	if initUser.ID != reqUID {
+		return nil, errors.New("trade must be made by initiator")
 	}
 
 	// users belong to group
@@ -176,7 +201,10 @@ func CreateTrade(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
-	trade, err := NewTrade(data)
+
+	// request auth is from initiator
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	trade, err := NewTrade(data, claims["userID"].(string))
 	if err != nil {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
@@ -195,11 +223,71 @@ func CreateTrade(w http.ResponseWriter, r *http.Request) {
 	render.Render(w, r, NewTradeResponse(*trade))
 }
 
-func FinalizeTrade() {
+/*FinalizeTrade will update a trade status based on execution or decline.
+It can update competeing trades, and will reflect the trade in the assoicated schedule */
+func FinalizeTrade(w http.ResponseWriter, r *http.Request) {
+	data := &FinalizeTradeRequest{}
+	if err := render.Bind(r, data); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	uid, _ := primitive.ObjectIDFromHex(claims["userID"].(string))
+	tid, _ := primitive.ObjectIDFromHex(data.TradeID)
+	schid, _ := primitive.ObjectIDFromHex(data.ScheduleID)
+	u := &User{}
+	if err := mh.GetUser(u, bson.M{"_id": uid}); err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+	t := &Trade{}
+	if err := mh.GetTrade(t, tid, schid); err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
+	if t.Status == 2 || t.Status == 3 {
+		render.Render(w, r, ErrInvalidRequest(errors.New("trade is void or cancelled")))
+		return
+	}
+	sch := &MasterSchedule{}
+	if err := mh.GetMasterSchedule(sch, bson.M{"_id": schid}); err != nil {
+		render.Render(w, r, ErrNotFound(err))
+		return
+	}
 
-	// TODO: void out ALL/ANY other trades that share any traded units (uuids)
-	// TODO: update this trade status.
-	// TODO: reflect trade in schedule
+	// can the requestor participate in the trade?
+	tradeFilter := bson.M{"_id": schid, "tradeLedger._id": tid}
+	if t.ExecutorEmail == u.Email {
+		// Executor
+		if data.Action == 1 {
+
+			// Accepted:
+			if err := mh.ExecuteTrade(t, schid); err != nil {
+				render.Render(w, r, ErrServer(err))
+				return
+			}
+		} else {
+			// Declined!
+			if err := mh.UpdateTrade(tradeFilter, bson.M{"$set": bson.M{"status": 2}}); err != nil {
+				render.Render(w, r, ErrNotFound(err))
+				return
+			}
+		}
+	} else if t.InitiatorEmail == u.Email {
+		if data.Action == 1 {
+			render.Render(w, r, ErrInvalidRequest(errors.New("initiator cannot preform this action")))
+			return
+		} else {
+			// Cancelled!
+			if err := mh.UpdateTrade(tradeFilter, bson.M{"$set": bson.M{"status": 3}}); err != nil {
+				render.Render(w, r, ErrNotFound(err))
+				return
+			}
+		}
+	} else {
+		render.Render(w, r, ErrInvalidRequest(errors.New("requestor not involved in trade")))
+		return
+	}
 }
 
 // GetUserTrades gets all trades belonging to a user's current groups
@@ -209,12 +297,12 @@ func GetUserTrades(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	// TODO: remove this query and combine with $lookup in GetActiveScheduleUserTrades
 	user := &User{}
 	if err := mh.GetUser(user, bson.M{"_id": uID}); err != nil {
 		render.Render(w, r, ErrNotFound(err))
 		return
 	}
-
 	userGroupsTrades := mh.GetActiveScheduleUserTrades(user.Groups, user.Email)
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, NewUserTradesResponse(userGroupsTrades))

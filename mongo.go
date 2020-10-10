@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/tkanos/gonfig"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -182,7 +183,7 @@ func (mh *MongoHandler) GetUsers(filter interface{}) ([]*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	projection := bson.D{{"email", 1}, {"_id", 1}, {"firstName", 1}, {"lastName", 1}} // set field to 1 to project
+	projection := bson.M{"email": 1, "_id": 1, "firstName": 1, "lastName": 1} // set field to 1 to project
 	cur, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
 	if err != nil {
 		return nil, err
@@ -307,6 +308,9 @@ func (mh *MongoHandler) InsertTrade(t *Trade, schID primitive.ObjectID) error {
 
 // GetActiveScheduleUserTrades returns a user's trades for all active user groups in groupIDs
 func (mh *MongoHandler) GetActiveScheduleUserTrades(groupIDs []primitive.ObjectID, email string) []GroupTrades {
+
+	// TODO: use $lookup with userID to remove getUser lookup
+
 	collection := mh.client.Database(mh.database).Collection("schedule")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -345,4 +349,99 @@ func (mh *MongoHandler) GetActiveScheduleUserTrades(groupIDs []primitive.ObjectI
 		panic(err)
 	}
 	return groupsTrades
+}
+
+// GetTrade get's a trade by ID within the schedule tradeLedger using mongo aggregate framework
+func (mh *MongoHandler) GetTrade(t *Trade, tradeID, schID primitive.ObjectID) error {
+	collection := mh.client.Database(mh.database).Collection("schedule")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	matchSch := bson.M{"$match": bson.M{"_id": schID}}
+	unwind := bson.M{"$unwind": "$tradeLedger"}
+	matchT := bson.M{"$match": bson.M{"tradeLedger._id": tradeID}}
+	project := bson.M{"$project": bson.M{
+		"_id":             "$tradeLedger._id",
+		"createdAt":       "$tradeLedger.createdAt",
+		"initiatorEmail":  "$tradeLedger.initiatorEmail",
+		"executorEmail":   "$tradeLedger.executorEmail",
+		"initiatorTrades": "$tradeLedger.initiatorTrades",
+		"executorTrades":  "$tradeLedger.executorTrades",
+		"status":          "$tradeLedger.status",
+	}}
+	pipeline := []bson.M{matchSch, unwind, matchT, project}
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+	// the aggregate will only return one trade sub doc because of match on id
+	cursor.Next(ctx)
+	err = cursor.Decode(t) // do i need to call Next() before this?
+	return err
+}
+
+// UpdateTrade updates a subdoc trade in a schedule with a status
+func (mh *MongoHandler) UpdateTrade(filter interface{}, update interface{}) error {
+	collection := mh.client.Database(mh.database).Collection("schedule")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := collection.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// ExecuteTrade will execute a trade, void competeing trades and reflect it in the schedule
+func (mh *MongoHandler) ExecuteTrade(t *Trade, schID primitive.ObjectID) error {
+	collection := mh.client.Database(mh.database).Collection("schedule")
+	var unitIDs []uuid.UUID
+	unitIDs = append(unitIDs, t.InitiatorTrades...)
+	unitIDs = append(unitIDs, t.ExecutorTrades...)
+
+	var session mongo.Session
+	var err error
+	if session, err = mh.client.StartSession(); err != nil {
+		return errors.New("session error")
+	}
+	if err := session.StartTransaction(); err != nil {
+		return errors.New("tx group error")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+
+		// void out ALL/ANY other trades that share any traded units (uuids)
+		filter := bson.M{"_id": schID}
+		update := bson.M{"$set": bson.M{"tradeLedger.$[trade].status": 2}} // 2 is void
+
+		arrayFiltersOpts := options.Update().SetArrayFilters(options.ArrayFilters{
+			Filters: []interface{}{bson.M{
+				"$or": bson.A{
+					bson.M{"trade.initiatorTrades": bson.M{"$in": unitIDs}},
+					bson.M{"trade.executorTrades": bson.M{"$in": unitIDs}},
+				},
+			}},
+		})
+		if _, err := collection.UpdateOne(sc, filter, update, arrayFiltersOpts); err != nil {
+			return err
+		}
+
+		// update this trade status executed.
+		filter = bson.M{"_id": schID, "tradeLedger._id": t.ID}
+		update = bson.M{"$set": bson.M{"tradeLedger.$.status": 1}} // 1 is executed
+		if _, err := collection.UpdateOne(sc, filter, update); err != nil {
+			return err
+		}
+
+		// TODO: reflect trade in schedule
+
+		if err = session.CommitTransaction(sc); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	session.EndSession(ctx)
+	return nil
 }

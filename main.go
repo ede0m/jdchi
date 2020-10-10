@@ -94,6 +94,7 @@ func main() {
 		})
 		r.Route("/trade", func(r chi.Router) {
 			r.Post("/", CreateTrade)
+			r.Patch("/", FinalizeTrade)
 		})
 	})
 

@@ -165,5 +165,4 @@ func AcceptRegisterInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, NewAcceptRegisterInviteResponse())
-
 }
