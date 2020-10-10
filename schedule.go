@@ -15,12 +15,12 @@ import (
 
 // MasterSchedule is a jdscheudler output that is returned to all users
 type MasterSchedule struct {
-	ID          primitive.ObjectID         `json:"id" bson:"_id,omitempty"`
-	Schedule    jdscheduler.Schedule       `json:"schedule" bson:"schedule"`
-	OwnerMap    map[string]ScheduleMapUnit `json:"ownerMap" bson:"ownerMap"`
-	TradeLedger []Trade                    `json:"tradeLedger" bson:"tradeLedger"`
-	CreatedAt   time.Time                  `json:"createdAt" bson:"createdAt"`
-	GroupID     primitive.ObjectID         `json:"groupId" bson:"groupId"`
+	ID              primitive.ObjectID         `json:"id" bson:"_id,omitempty"`
+	Schedule        jdscheduler.Schedule       `json:"schedule" bson:"schedule"`
+	ScheduleUnitMap map[string]ScheduleMapUnit `json:"scheduleUnitMap" bson:"scheduleUnitMap"`
+	TradeLedger     []Trade                    `json:"tradeLedger" bson:"tradeLedger"`
+	CreatedAt       time.Time                  `json:"createdAt" bson:"createdAt"`
+	GroupID         primitive.ObjectID         `json:"groupId" bson:"groupId"`
 
 	// TODO persist pick orders
 }
@@ -209,10 +209,32 @@ func GetMasterSchedule(w http.ResponseWriter, r *http.Request) {
 	render.Render(w, r, NewMasterScheduleResponse(*ms))
 }
 
-/*func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map[string]ScheduleMapUnit) {
+func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map[string]ScheduleMapUnit) {
 
 	sch := ms.Schedule
-	ownerMap := ms.OwnerMap
-	// deep copy so we don't overwrite references
-	return nil, nil
-}*/
+	suMap := ms.ScheduleUnitMap
+
+	for _, u := range t.InitiatorTrades {
+		smu := suMap[u.String()]
+		smu.Owner = t.ExecutorEmail
+		indicies := smu.MapIndicies
+		if len(indicies) == 3 {
+			sch.Seasons[indicies[0]].Blocks[indicies[1]].Weeks[indicies[2]].Participant = t.ExecutorEmail
+		} else {
+			panic(errors.New("schedule map unit indicies corrupt"))
+		}
+	}
+
+	for _, u := range t.ExecutorTrades {
+		smu := suMap[u.String()]
+		smu.Owner = t.InitiatorEmail
+		indicies := smu.MapIndicies
+		if len(indicies) == 3 {
+			sch.Seasons[indicies[0]].Blocks[indicies[1]].Weeks[indicies[2]].Participant = t.InitiatorEmail
+		} else {
+			panic(errors.New("schedule map unit indicies corrupt"))
+		}
+	}
+
+	return sch, suMap
+}

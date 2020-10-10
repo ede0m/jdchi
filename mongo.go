@@ -390,7 +390,7 @@ func (mh *MongoHandler) UpdateTrade(filter interface{}, update interface{}) erro
 }
 
 // ExecuteTrade will execute a trade, void competeing trades and reflect it in the schedule
-func (mh *MongoHandler) ExecuteTrade(t *Trade, schID primitive.ObjectID) error {
+func (mh *MongoHandler) ExecuteTrade(t *Trade, sch *MasterSchedule) error {
 	collection := mh.client.Database(mh.database).Collection("schedule")
 	var unitIDs []uuid.UUID
 	unitIDs = append(unitIDs, t.InitiatorTrades...)
@@ -411,7 +411,7 @@ func (mh *MongoHandler) ExecuteTrade(t *Trade, schID primitive.ObjectID) error {
 	if err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
 
 		// void out ALL/ANY other trades that share any traded units (uuids)
-		filter := bson.M{"_id": schID}
+		filter := bson.M{"_id": sch.ID}
 		update := bson.M{"$set": bson.M{"tradeLedger.$[trade].status": 2}} // 2 is void
 
 		arrayFiltersOpts := options.Update().SetArrayFilters(options.ArrayFilters{
@@ -425,16 +425,17 @@ func (mh *MongoHandler) ExecuteTrade(t *Trade, schID primitive.ObjectID) error {
 		if _, err := collection.UpdateOne(sc, filter, update, arrayFiltersOpts); err != nil {
 			return err
 		}
-
-		// update this trade status executed.
-		filter = bson.M{"_id": schID, "tradeLedger._id": t.ID}
-		update = bson.M{"$set": bson.M{"tradeLedger.$.status": 1}} // 1 is executed
+		// update this trade status executed
+		// reflect trade in schedule
+		filter = bson.M{"_id": sch.ID, "tradeLedger._id": t.ID}
+		update = bson.M{"$set": bson.M{
+			"tradeLedger.$.status": 1, // 1 is executed
+			"schedule":             sch.Schedule,
+			"scheduleUnitMap":      sch.ScheduleUnitMap,
+		}}
 		if _, err := collection.UpdateOne(sc, filter, update); err != nil {
 			return err
 		}
-
-		// TODO: reflect trade in schedule
-
 		if err = session.CommitTransaction(sc); err != nil {
 			return err
 		}

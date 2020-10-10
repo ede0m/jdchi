@@ -175,7 +175,7 @@ func NewTrade(tr *TradeRequest, reqUserID string) (*Trade, error) {
 	initTrades, execTrades := []uuid.UUID{}, []uuid.UUID{}
 	for _, guid := range tr.InitiatorTrades {
 		initTrades = append(initTrades, uuid.MustParse(guid))
-		if v, ok := sch.OwnerMap[guid]; ok {
+		if v, ok := sch.ScheduleUnitMap[guid]; ok {
 			if v.Owner != tr.InitiatorEmail {
 				return nil, errors.New(guid + " not owned by " + tr.InitiatorEmail)
 			}
@@ -184,7 +184,7 @@ func NewTrade(tr *TradeRequest, reqUserID string) (*Trade, error) {
 	// check that executor trades belong to executor
 	for _, guid := range tr.ExecutorTrades {
 		execTrades = append(execTrades, uuid.MustParse(guid))
-		if v, ok := sch.OwnerMap[guid]; ok {
+		if v, ok := sch.ScheduleUnitMap[guid]; ok {
 			if v.Owner != tr.ExecutorEmail {
 				return nil, errors.New(guid + " not owned by " + tr.ExecutorEmail)
 			}
@@ -249,20 +249,21 @@ func FinalizeTrade(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, ErrInvalidRequest(errors.New("trade is void or cancelled")))
 		return
 	}
-	sch := &MasterSchedule{}
-	if err := mh.GetMasterSchedule(sch, bson.M{"_id": schid}); err != nil {
-		render.Render(w, r, ErrNotFound(err))
-		return
-	}
 
 	// can the requestor participate in the trade?
 	tradeFilter := bson.M{"_id": schid, "tradeLedger._id": tid}
 	if t.ExecutorEmail == u.Email {
 		// Executor
 		if data.Action == 1 {
-
 			// Accepted:
-			if err := mh.ExecuteTrade(t, schid); err != nil {
+			// TODO: incorperate lock??
+			sch := &MasterSchedule{}
+			if err := mh.GetMasterSchedule(sch, bson.M{"_id": schid}); err != nil {
+				render.Render(w, r, ErrNotFound(err))
+				return
+			}
+			sch.Schedule, sch.ScheduleUnitMap = sch.tradeScheduleUnits(*t)
+			if err := mh.ExecuteTrade(t, sch); err != nil {
 				render.Render(w, r, ErrServer(err))
 				return
 			}
@@ -277,12 +278,11 @@ func FinalizeTrade(w http.ResponseWriter, r *http.Request) {
 		if data.Action == 1 {
 			render.Render(w, r, ErrInvalidRequest(errors.New("initiator cannot preform this action")))
 			return
-		} else {
-			// Cancelled!
-			if err := mh.UpdateTrade(tradeFilter, bson.M{"$set": bson.M{"status": 3}}); err != nil {
-				render.Render(w, r, ErrNotFound(err))
-				return
-			}
+		}
+		// Cancelled!
+		if err := mh.UpdateTrade(tradeFilter, bson.M{"$set": bson.M{"status": 3}}); err != nil {
+			render.Render(w, r, ErrNotFound(err))
+			return
 		}
 	} else {
 		render.Render(w, r, ErrInvalidRequest(errors.New("requestor not involved in trade")))
