@@ -392,9 +392,14 @@ func (mh *MongoHandler) UpdateTrade(filter interface{}, update interface{}) erro
 // ExecuteTrade will execute a trade, void competeing trades and reflect it in the schedule
 func (mh *MongoHandler) ExecuteTrade(t *Trade, sch *MasterSchedule) error {
 	collection := mh.client.Database(mh.database).Collection("schedule")
+
 	var unitIDs []uuid.UUID
-	unitIDs = append(unitIDs, t.InitiatorTrades...)
-	unitIDs = append(unitIDs, t.ExecutorTrades...)
+	for _, tu := range t.InitiatorTrades {
+		unitIDs = append(unitIDs, tu.ID)
+	}
+	for _, tu := range t.ExecutorTrades {
+		unitIDs = append(unitIDs, tu.ID)
+	}
 
 	var session mongo.Session
 	var err error

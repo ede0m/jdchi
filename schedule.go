@@ -27,8 +27,9 @@ type MasterSchedule struct {
 
 // ScheduleMapUnit is a value of the MasterSchedule's OwnerMap
 type ScheduleMapUnit struct {
-	Owner       string `json:"owner" bson:"owner"`
-	MapIndicies []int  `json:"mapIndicies" bson:"mapIndicies"`
+	Owner       string    `json:"owner" bson:"owner"`
+	Start       time.Time `json:"start" bson:"start"`
+	MapIndicies []int     `json:"mapIndicies" bson:"mapIndicies"`
 }
 
 // MasterScheduleResponse is the response payload for MasterSchedule data model.
@@ -65,7 +66,7 @@ func NewMasterSchedule(sch jdscheduler.Schedule, groupID primitive.ObjectID) (*M
 	for i, s := range sch.Seasons {
 		for j, b := range s.Blocks {
 			for k, unit := range b.Units {
-				scm := ScheduleMapUnit{unit.Participant, []int{i, j, k}}
+				scm := ScheduleMapUnit{unit.Participant, unit.Start, []int{i, j, k}}
 				ownerMap[unit.ID.String()] = scm
 			}
 		}
@@ -215,7 +216,7 @@ func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map
 	suMap := ms.ScheduleUnitMap
 
 	for _, u := range t.InitiatorTrades {
-		smu := suMap[u.String()]
+		smu := suMap[u.ID.String()]
 		smu.Owner = t.ExecutorEmail
 		indicies := smu.MapIndicies
 		if len(indicies) == 3 {
@@ -226,7 +227,7 @@ func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map
 	}
 
 	for _, u := range t.ExecutorTrades {
-		smu := suMap[u.String()]
+		smu := suMap[u.ID.String()]
 		smu.Owner = t.InitiatorEmail
 		indicies := smu.MapIndicies
 		if len(indicies) == 3 {

@@ -30,9 +30,15 @@ type Trade struct {
 	CreatedAt       time.Time          `json:"createdAt" bson:"createdAt"`
 	InitiatorEmail  string             `json:"initiatorEmail" bson:"initiatorEmail"`
 	ExecutorEmail   string             `json:"executorEmail" bson:"executorEmail"`
-	InitiatorTrades []uuid.UUID        `json:"initiatorTrades" bson:"initiatorTrades"`
-	ExecutorTrades  []uuid.UUID        `json:"executorTrades" bson:"executorTrades"`
+	InitiatorTrades []TradeUnit        `json:"initiatorTrades" bson:"initiatorTrades"`
+	ExecutorTrades  []TradeUnit        `json:"executorTrades" bson:"executorTrades"`
 	Status          TradeStatus        `json:"status" bson:"status"`
+}
+
+// TradeUnit wraps a trade id and its specs
+type TradeUnit struct {
+	ID        uuid.UUID `json:"id" bson:"_id"`
+	UnitStart time.Time `json:"unitStart" bson:"unitStart"`
 }
 
 // TradeRequest for creating a new trade
@@ -172,22 +178,26 @@ func NewTrade(tr *TradeRequest, reqUserID string) (*Trade, error) {
 	}
 
 	// check that initiator trades belong to initiator
-	initTrades, execTrades := []uuid.UUID{}, []uuid.UUID{}
+	initTrades, execTrades := []TradeUnit{}, []TradeUnit{}
 	for _, guid := range tr.InitiatorTrades {
-		initTrades = append(initTrades, uuid.MustParse(guid))
 		if v, ok := sch.ScheduleUnitMap[guid]; ok {
+			initTrades = append(initTrades, TradeUnit{uuid.MustParse(guid), v.Start})
 			if v.Owner != tr.InitiatorEmail {
 				return nil, errors.New(guid + " not owned by " + tr.InitiatorEmail)
 			}
+		} else {
+			return nil, errors.New("schedule unit map error")
 		}
 	}
 	// check that executor trades belong to executor
 	for _, guid := range tr.ExecutorTrades {
-		execTrades = append(execTrades, uuid.MustParse(guid))
 		if v, ok := sch.ScheduleUnitMap[guid]; ok {
+			execTrades = append(execTrades, TradeUnit{uuid.MustParse(guid), v.Start})
 			if v.Owner != tr.ExecutorEmail {
 				return nil, errors.New(guid + " not owned by " + tr.ExecutorEmail)
 			}
+		} else {
+			return nil, errors.New("schedule unit map error")
 		}
 	}
 
