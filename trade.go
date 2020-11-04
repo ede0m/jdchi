@@ -63,7 +63,7 @@ type UserTradesResponse struct {
 
 // GroupTrades monog aggregate query for user's group trades
 type GroupTrades struct {
-	ScheduleID primitive.ObjectID `json:"scheduleID" bson:"_id"`
+	ScheduleID primitive.ObjectID `json:"scheduleId" bson:"_id"`
 	GroupID    primitive.ObjectID `json:"groupId" bson:"groupId"`
 	Trades     []Trade            `json:"trades" bson:"trades"`
 }

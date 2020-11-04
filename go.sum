@@ -17,6 +17,8 @@ github.com/ede0m/jdgoscheduler v0.0.0-20200921052927-2d7cd2be2a09 h1:dJSNoRxyaLa
 github.com/ede0m/jdgoscheduler v0.0.0-20200921052927-2d7cd2be2a09/go.mod h1:lLt9PA7+YtJ83NOcB0t7N+9FvFjWJB6RTqnCw2sXAac=
 github.com/ede0m/jdgoscheduler v0.0.0-20200928225910-26af95d9d54b h1:Z6yRPIOULk7PskERYTSfcZc0c7s4CgqgL7rh8zMmxpM=
 github.com/ede0m/jdgoscheduler v0.0.0-20200928225910-26af95d9d54b/go.mod h1:arJtjQ8mu5rzSNinJ1uuxDMBCAxMjqJ7WnSkL6thwrI=
+github.com/ede0m/jdgoscheduler v0.0.0-20201104174348-0991bee21eeb h1:PGUwLhm415GkoXzPMcs5+hbn2WeJpObTKW0n1xu63Cg=
+github.com/ede0m/jdgoscheduler v0.0.0-20201104174348-0991bee21eeb/go.mod h1:arJtjQ8mu5rzSNinJ1uuxDMBCAxMjqJ7WnSkL6thwrI=
 github.com/eknkc/amber v0.0.0-20171010120322-cdade1c07385/go.mod h1:0vRUJqYpeSZifjYj7uP3BG/gKcuzL9xWVV/Y+cK33KM=
 github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=

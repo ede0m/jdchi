@@ -45,11 +45,12 @@ type LoginRequest struct {
 
 // UserResponse a typical response for login/register
 type UserResponse struct {
-	FirstName string          `json:"firstName"`
-	LastName  string          `json:"lastName"`
-	Email     string          `json:"email"`
-	Groups    []GroupResponse `json:"groups"`
-	Token     string          `json:"token"`
+	FirstName string             `json:"firstName"`
+	LastName  string             `json:"lastName"`
+	ID        primitive.ObjectID `json:"id"`
+	Email     string             `json:"email"`
+	Groups    []GroupResponse    `json:"groups"`
+	Token     string             `json:"token"`
 }
 
 // GroupUserResponse is a group's representation of a user
@@ -88,8 +89,8 @@ func NewUserResponse(u User) *UserResponse {
 			groups = append(groups, *NewGroupResponse(*group))
 		}
 	}
-	jwt := createTokenString(u.ID.Hex(), 15*time.Minute) // expires in 15 mins
-	return &UserResponse{u.FirstName, u.LastName, u.Email, groups, jwt}
+	jwt := createTokenString(u.ID.Hex(), 30*time.Minute) // expires in 30 mins
+	return &UserResponse{u.FirstName, u.LastName, u.ID, u.Email, groups, jwt}
 }
 
 // NewGroupUserResponse returns group user from a user

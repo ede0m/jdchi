@@ -52,8 +52,8 @@ type MasterScheduleRequest struct {
 
 // ScheduleRequest is the request payload for generating schedules against the jdscheduler module
 type ScheduleRequest struct {
-	StartDate    time.Time // must pass in RFC3339 or UTC format
-	SeasonWeeks  int
+	Start        time.Time // must pass in RFC3339 or UTC format
+	SeasonUnits  int
 	Years        int
 	Participants []string
 }
@@ -64,7 +64,7 @@ func NewMasterSchedule(sch jdscheduler.Schedule, groupID primitive.ObjectID) (*M
 	ownerMap := make(map[string]ScheduleMapUnit)
 	for i, s := range sch.Seasons {
 		for j, b := range s.Blocks {
-			for k, unit := range b.Weeks {
+			for k, unit := range b.Units {
 				scm := ScheduleMapUnit{unit.Participant, []int{i, j, k}}
 				ownerMap[unit.ID.String()] = scm
 			}
@@ -103,17 +103,17 @@ func (rd *MasterScheduleResponse) Render(w http.ResponseWriter, r *http.Request)
 // Bind binds the http req to scheduleRequest type as the render
 func (sr *ScheduleRequest) Bind(r *http.Request) error {
 	// error handle
-	if sr.StartDate.IsZero() || sr.Participants == nil {
+	if sr.Start.IsZero() || sr.Participants == nil {
 		return errors.New("missing required StartDate, Participants fields")
 	}
 	// remove hh::mm::ss
-	sr.StartDate = time.Date(sr.StartDate.Year(), sr.StartDate.Month(), sr.StartDate.Day(), 0, 0, 0, 0, sr.StartDate.Location())
+	sr.Start = time.Date(sr.Start.Year(), sr.Start.Month(), sr.Start.Day(), 0, 0, 0, 0, sr.Start.Location())
 	// defaults
 	if sr.Years == 0 {
 		sr.Years = 5
 	}
-	if sr.SeasonWeeks == 0 {
-		sr.SeasonWeeks = 3
+	if sr.SeasonUnits == 0 {
+		sr.SeasonUnits = 3
 	}
 
 	// TODO: handle user
@@ -140,7 +140,7 @@ func GenerateSchedule(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
-	start, wksPSeason, nSeason, participants := data.StartDate, data.SeasonWeeks, data.Years, data.Participants
+	start, wksPSeason, nSeason, participants := data.Start, data.SeasonUnits, data.Years, data.Participants
 	s, err := jdscheduler.NewSchedule(start, nSeason, wksPSeason, participants)
 	if err != nil {
 		render.Render(w, r, ErrInvalidRequest(err))
@@ -219,7 +219,7 @@ func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map
 		smu.Owner = t.ExecutorEmail
 		indicies := smu.MapIndicies
 		if len(indicies) == 3 {
-			sch.Seasons[indicies[0]].Blocks[indicies[1]].Weeks[indicies[2]].Participant = t.ExecutorEmail
+			sch.Seasons[indicies[0]].Blocks[indicies[1]].Units[indicies[2]].Participant = t.ExecutorEmail
 		} else {
 			panic(errors.New("schedule map unit indicies corrupt"))
 		}
@@ -230,7 +230,7 @@ func (ms *MasterSchedule) tradeScheduleUnits(t Trade) (jdscheduler.Schedule, map
 		smu.Owner = t.InitiatorEmail
 		indicies := smu.MapIndicies
 		if len(indicies) == 3 {
-			sch.Seasons[indicies[0]].Blocks[indicies[1]].Weeks[indicies[2]].Participant = t.InitiatorEmail
+			sch.Seasons[indicies[0]].Blocks[indicies[1]].Units[indicies[2]].Participant = t.InitiatorEmail
 		} else {
 			panic(errors.New("schedule map unit indicies corrupt"))
 		}
